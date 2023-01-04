@@ -59,14 +59,14 @@ namespace SPH
     //=================================================================================================//
     template <typename VariableType, class InitializationFunction>
     void BaseParticles::registerVariable(StdLargeVec<VariableType> &variable_addrs,
-                         const std::string &variable_name, const InitializationFunction &initialization)
+                                         const std::string &variable_name, const InitializationFunction &initialization)
     {
         constexpr int type_index = DataTypeIndex<VariableType>::value;
 
         registerVariable(variable_addrs, variable_name);
         for (size_t i = 0; i != real_particles_bound_; ++i)
         {
-            variable_addrs[i] = initialization(i);  //Here, lambda function is applied for initialization. 
+            variable_addrs[i] = initialization(i); // Here, lambda function is applied for initialization.
         }
     }
     //=================================================================================================//
@@ -116,6 +116,13 @@ namespace SPH
     void BaseParticles::addVariableToWrite(const std::string &variable_name)
     {
         addVariableNameToList<VariableType>(variables_to_write_, variable_name);
+    }
+    //=================================================================================================//
+    template <typename VariableType>
+    void BaseParticles::addExtraVariableToWrite(const DiscreteVariable<VariableType> &variable)
+    {
+        constexpr int type_index = DataTypeIndex<VariableType>::value;
+        std::get<type_index>(extra_variables_to_write_).push_back(variable);
     }
     //=================================================================================================//
     template <class DerivedVariableMethod>
@@ -282,6 +289,20 @@ namespace SPH
             output_stream << "    </DataArray>\n";
         }
 
+        // write extra scalars
+        for (auto &scalar : extra_variables_to_write_[0])
+        {
+            StdLargeVec<Real> &scalar_data = std::get<0>(extra_particle_data_)[scalar.IndexInContainer()];
+            output_stream << "    <DataArray Name=\"" << scalar.VariableName() << "\" type=\"Float32\" Format=\"ascii\">\n";
+            output_stream << "    ";
+            for (size_t i = 0; i != total_real_particles; ++i)
+            {
+                output_stream << std::fixed << std::setprecision(9) << variable[i] << " ";
+            }
+            output_stream << std::endl;
+            output_stream << "    </DataArray>\n";
+        }
+
         // write vectors
         for (std::pair<std::string, size_t> &name_index : variables_to_write_[1])
         {
@@ -297,7 +318,6 @@ namespace SPH
             output_stream << std::endl;
             output_stream << "    </DataArray>\n";
         }
-
 
         // // write matrices
         // for (std::pair<std::string, size_t> &name_index : variables_to_write_[2])
@@ -318,7 +338,6 @@ namespace SPH
         //     output_stream << std::endl;
         //     output_stream << "    </DataArray>\n";
         // }
-
     }
     //=================================================================================================//
     template <typename VariableType>

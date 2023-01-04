@@ -56,6 +56,7 @@ namespace SPH
     };
 
     const bool sharedVariable = true;
+    const bool isToWrite = true;
     typedef DataContainerAssemble<DiscreteVariable> DiscreteVariableAssemble;
     template <typename DataType>
     using VariableContainer = StdVec<DiscreteVariable<DataType>>;
