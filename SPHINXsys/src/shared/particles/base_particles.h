@@ -82,7 +82,7 @@ namespace SPH
 	class BaseParticles
 	{
 	private:
-		UniquePtrKeepers<BaseDynamics<void>> derived_particle_data_; /**< Unique ptr for Base dynamics. */
+		UniquePtrKeepers<BaseDynamics<void>> derived_particle_data_; 	/**< Unique ptr for Base dynamics. */
 
 	public:
 		explicit BaseParticles(SPHBody &sph_body, BaseMaterial *base_material);
@@ -110,28 +110,10 @@ namespace SPH
 		ParticleDataMap all_variable_maps_;
 		StdVec<BaseDynamics<void> *> derived_variables_;
 		ParticleVariableList variables_to_write_;
-		DataContainerAssemble<StdLargeVec> extra_particle_data_;
-		DiscreteVariableAssemble extra_variables_to_write_;
-
-		/** access variable data with discrete variable */
-		template <typename DataType>
-		StdLargeVec<DataType> &getVariableData(const DiscreteVariable<DataType> &discrete_variable)
-		{
-			constexpr int type_index = DataTypeIndex<DataType>::value;
-			return std::get<type_index>(extra_particle_data_)[discrete_variable.IndexInContainer()];
-		};
-		/** initialize data address with discrete variable */
-		template <typename DataType>
-		void initializeVariableData(const DiscreteVariable<DataType> &discrete_variable, const DataType &initial_value)
-		{
-			constexpr int type_index = DataTypeIndex<DataType>::value;
-			std::get<type_index>(extra_particle_data_).resize(discrete_variable.IndexInContainer() + 1)
-			std::get<type_index>(extra_particle_data_)[discrete_variable.IndexInContainer()].resize(real_particles_bound_, initial_value);
-		};
 
 		/** register a variable defined in a class (can be non-particle class) */
 		template <typename VariableType>
-		void registerVariable(StdLargeVec<VariableType> &variable_addrs, const std::string &variable_name,
+		void registerVariable(StdLargeVec<VariableType> &variable_addrs, const std::string &variable_name, 
 							  VariableType initial_value = ZeroData<VariableType>::value);
 		/** register a variable from a initialization function */
 		template <typename VariableType, class InitializationFunction>
@@ -146,9 +128,6 @@ namespace SPH
 		/** add a variable into the list for state output */
 		template <typename VariableType>
 		void addVariableToWrite(const std::string &variable_name);
-		/** add a variable into the list for state output */
-		template <typename VariableType>
-		void addExtraVariableToWrite(const DiscreteVariable<VariableType> &variable);
 		/** add a derived variable into the list for state output */
 		template <class DerivedVariableMethod>
 		void addDerivedVariableToWrite();
@@ -223,13 +202,13 @@ namespace SPH
 		virtual Real ParticleMass(size_t index_i) { return mass_[index_i]; }
 
 	protected:
-		SPHBody &sph_body_;							/**< The body in which the particles belongs to. */
-		std::string body_name_;						/**< Name of the body. */
-		XmlEngine restart_xml_engine_;				/**< Restart XML engine. */
-		XmlEngine reload_xml_engine_;				/**< Reload XML engine. */
-		ParticleVariableList variables_to_restart_; /**< Particle variables for restart. */
-		ParticleVariableList variables_to_reload_;	/**< Particle variables for reload. */
-		void addAParticleEntry();					/**< Add a particle entry to the particle array. */
+		SPHBody &sph_body_; 							/**< The body in which the particles belongs to. */
+		std::string body_name_;							/**< Name of the body. */
+		XmlEngine restart_xml_engine_;					/**< Restart XML engine. */
+		XmlEngine reload_xml_engine_;					/**< Reload XML engine. */
+		ParticleVariableList variables_to_restart_;		/**< Particle variables for restart. */
+		ParticleVariableList variables_to_reload_;		/**< Particle variables for reload. */
+		void addAParticleEntry();						/**< Add a particle entry to the particle array. */
 		/** Write header to PLT file. */
 		virtual void writePltFileHeader(std::ofstream &output_file);
 		/** Write particle data to PLT file. */
@@ -259,7 +238,7 @@ namespace SPH
 	};
 	/**
 	 * @struct WriteAParticleVariableToXml
-	 * @brief Define a operator for writing particle variable to XML format.
+	 * @brief Define a operator for writing particle variable to XML format. 
 	 */
 	struct WriteAParticleVariableToXml
 	{
@@ -273,7 +252,7 @@ namespace SPH
 	};
 	/**
 	 * @struct ReadAParticleVariableFromXml
-	 * @brief Define a operator for reading particle variable to XML format.
+	 * @brief Define a operator for reading particle variable to XML format. 
 	 */
 	struct ReadAParticleVariableFromXml
 	{

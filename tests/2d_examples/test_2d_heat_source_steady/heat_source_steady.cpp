@@ -43,10 +43,10 @@ Vec2d block_translation = block_halfsize;						 // translation to global coordin
 Vec2d constraint_halfsize = Vec2d(0.05 * L, 0.5 * BW);			 // constraint block half size
 Vec2d top_constraint_translation = Vec2d(0.5 * L, L + 0.5 * BW); // top constraint
 Vec2d bottom_constraint_translation = Vec2d(0.5 * L, -0.5 * BW); // bottom constraint
-class DiffusionBoundary : public ComplexShape
+class IsothermalBoundaries : public ComplexShape
 {
 public:
-	explicit DiffusionBoundary(const std::string &shape_name)
+	explicit IsothermalBoundaries(const std::string &shape_name)
 		: ComplexShape(shape_name)
 	{
 		add<TransformShape<GeometricShapeBox>>(Transform2d(top_constraint_translation), constraint_halfsize);
@@ -73,11 +73,11 @@ protected:
 //----------------------------------------------------------------------
 //	Constraints for isothermal boundaries.
 //----------------------------------------------------------------------
-class DiffusionBoundaryConstraints : public ValueAssignment<Real>
+class IsothermalBoundariesConstraints : public ValueAssignment<Real>
 {
 public:
-	explicit DiffusionBoundaryConstraints(SolidBody &diffusion_boundary)
-		: ValueAssignment<Real>(diffusion_boundary, variable_name),
+	explicit IsothermalBoundariesConstraints(SolidBody &isothermal_boundaries)
+		: ValueAssignment<Real>(isothermal_boundaries, variable_name),
 		  pos_(particles_->pos_){};
 
 	void update(size_t index_i, Real dt)
@@ -296,26 +296,42 @@ int main()
 						Transform2d(block_translation), block_halfsize, "DiffusionBody"));
 	diffusion_body.defineParticlesAndMaterial<SolidParticles, Solid>();
 	diffusion_body.generateParticles<ParticleGeneratorLattice>();
-	DiscreteVariable<Real> body_temperature = diffusion_body.addVariable<Real>(variable_name, isToWrite);
-	DiscreteVariable<Real> diffusivity = diffusion_body.addVariable<Real>(coefficient_name, isToWrite);
-	DiscreteVariable<Real> equation_residue = diffusion_body.addVariable<Real>(residue_name, isToWrite);
+	//----------------------------------------------------------------------
+	//	add extra discrete variables (not defined in the library)
+	//----------------------------------------------------------------------
+	StdLargeVec<Real> body_temperature;
+	diffusion_body.addBodyState<Real>(body_temperature, variable_name);
+	diffusion_body.addBodyStateForRecording<Real>(variable_name);
+	diffusion_body.addBodyStateToRestart<Real>(variable_name);
+	StdLargeVec<Real> diffusion_coefficient;
+	diffusion_body.addBodyState<Real>(diffusion_coefficient, coefficient_name);
+	diffusion_body.addBodyStateForRecording<Real>(coefficient_name);
+	diffusion_body.addBodyStateToRestart<Real>(coefficient_name);
+	StdLargeVec<Real> laplacian_residue;
+	diffusion_body.addBodyState<Real>(laplacian_residue, residue_name);
+	diffusion_body.addBodyStateForRecording<Real>(residue_name);
 
-	SolidBody diffusion_boundary(sph_system, makeShared<DiffusionBoundary>("DiffusionBoundary"));
-	diffusion_boundary.defineParticlesAndMaterial<SolidParticles, Solid>();
-	diffusion_boundary.generateParticles<ParticleGeneratorLattice>();
-	DiscreteVariable<Real> boundary_temperature = diffusion_boundary.addVariable<Real>(variable_name, isToWrite);
+	SolidBody isothermal_boundaries(sph_system, makeShared<IsothermalBoundaries>("IsothermalBoundaries"));
+	isothermal_boundaries.defineParticlesAndMaterial<SolidParticles, Solid>();
+	isothermal_boundaries.generateParticles<ParticleGeneratorLattice>();
+	//----------------------------------------------------------------------
+	//	add extra discrete variables (not defined in the library)
+	//----------------------------------------------------------------------
+	StdLargeVec<Real> constrained_temperature;
+	isothermal_boundaries.addBodyState<Real>(constrained_temperature, variable_name);
+	isothermal_boundaries.addBodyStateForRecording<Real>(variable_name);
 	//----------------------------------------------------------------------
 	//	Define body relation map.
 	//	The contact map gives the topological connections between the bodies.
 	//	Basically the range of bodies to build neighbor particle lists.
 	//----------------------------------------------------------------------
-	ComplexRelation diffusion_body_complex(diffusion_body, {&diffusion_boundary});
+	ComplexRelation diffusion_body_complex(diffusion_body, {&isothermal_boundaries});
 	//----------------------------------------------------------------------
 	//	Define the main numerical methods used in the simulation.
 	//	Note that there may be data dependence on the constructors of these methods.
 	//----------------------------------------------------------------------
 	SimpleDynamics<DiffusionBodyInitialCondition> diffusion_initial_condition(diffusion_body);
-	SimpleDynamics<DiffusionBoundaryConstraints> boundary_constraint(diffusion_boundary);
+	SimpleDynamics<IsothermalBoundariesConstraints> boundary_constraint(isothermal_boundaries);
 	SimpleDynamics<DiffusivityDistribution> coefficient_distribution(diffusion_body);
 	SimpleDynamics<ConstraintTotalScalarAmount> constrain_total_coefficient(diffusion_body, coefficient_name);
 	SimpleDynamics<ImposingSourceTerm<Real>> thermal_source(diffusion_body, variable_name, heat_source);

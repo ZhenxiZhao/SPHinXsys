@@ -72,7 +72,6 @@ namespace SPH
 		SPHSystem &sph_system_;
 		bool newly_updated_;			/**< whether this body is in a newly updated state */
 		BaseParticles *base_particles_; /**< Base particles for dynamic cast DataDelegate  */
-		DiscreteVariableManager variable_manager_;
 
 	public:
 		Shape *body_shape_;					   /**< volumetric geometry enclosing the body */
@@ -156,14 +155,9 @@ namespace SPH
 		};
 
 		template <typename DataType>
-		DiscreteVariable<DataType> addVariable(const std::string &variable_name, bool is_to_write = !isToWrite)
+		void addBodyState(StdLargeVec<DataType> &variable_addrs, const std::string &variable_name)
 		{
-			DiscreteVariable<DataType> variable = variable_manager_.registerDiscreteVariable<DataType>(variable_name);
-			if (is_to_write)
-			{
-				base_particles_->template addExtraVariableToWrite<DataType>(variable);
-			}
-			return variable;
+			base_particles_->template registerVariable<DataType>(variable_addrs, variable_name);
 		};
 
 		template <typename VariableType>
