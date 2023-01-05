@@ -59,14 +59,31 @@ namespace SPH
     //=================================================================================================//
     template <typename VariableType, class InitializationFunction>
     void BaseParticles::registerVariable(StdLargeVec<VariableType> &variable_addrs,
-                         const std::string &variable_name, const InitializationFunction &initialization)
+                                         const std::string &variable_name, const InitializationFunction &initialization)
     {
         constexpr int type_index = DataTypeIndex<VariableType>::value;
 
         registerVariable(variable_addrs, variable_name);
         for (size_t i = 0; i != real_particles_bound_; ++i)
         {
-            variable_addrs[i] = initialization(i);  //Here, lambda function is applied for initialization. 
+            variable_addrs[i] = initialization(i); // Here, lambda function is applied for initialization.
+        }
+    }
+    //=================================================================================================//
+    template <typename VariableType>
+    StdLargeVec<VariableType> &BaseParticles::registerSharedVariable(const std::string &variable_name)
+    {
+        constexpr int type_index = DataTypeIndex<VariableType>::value;
+        if (all_variable_maps_[type_index].find(variable_name) == all_variable_maps_[type_index].end())
+        {
+            StdVec<StdLargeVec<VariableType>> &container = std::get<type_index>(shared_variable_data_);
+            container.push_back(StdLargeVec<VariableType>());
+            registerVariable(container.back(), variable_name);
+            return container.back();
+        }
+        else
+        {
+            return *(std::get<type_index>(all_particle_data_)[all_variable_maps_[type_index][variable_name]]);
         }
     }
     //=================================================================================================//
@@ -298,7 +315,6 @@ namespace SPH
             output_stream << "    </DataArray>\n";
         }
 
-
         // // write matrices
         // for (std::pair<std::string, size_t> &name_index : variables_to_write_[2])
         // {
@@ -318,7 +334,6 @@ namespace SPH
         //     output_stream << std::endl;
         //     output_stream << "    </DataArray>\n";
         // }
-
     }
     //=================================================================================================//
     template <typename VariableType>
