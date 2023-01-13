@@ -377,6 +377,7 @@ int main()
 	int target_steps = 10; // default number of iteration for imposing target
 	bool imposing_target = true;
 	Real allowed_equation_residue = 2.0e5;
+	Real equation_residue_max = Infinity; // initial value
 	//----------------------------------------------------------------------
 	//	First output before the main loop.
 	//----------------------------------------------------------------------
@@ -387,7 +388,6 @@ int main()
 	while (GlobalStaticVariables::physical_time_ < End_Time)
 	{
 		Real relaxation_time = 0.0;
-		Real equation_residue_max = Infinity; // initial value
 		while (relaxation_time < Observe_time)
 		{
 			// equation solving step
