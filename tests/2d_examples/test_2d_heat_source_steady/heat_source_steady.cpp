@@ -108,15 +108,16 @@ protected:
 //----------------------------------------------------------------------
 //	Coefficient reference for imposing coefficient evolution.
 //----------------------------------------------------------------------
-class ReferenceThermalDiffusivity : public ValueAssignment<Real>
+class UpdateDiffusivityIncrements : public ValueAssignment<Real>
 {
 public:
-	ReferenceThermalDiffusivity(SPHBody &diffusion_body, const std::string &coefficient_name_ref)
-		: ValueAssignment<Real>(diffusion_body, coefficient_name),
-		  variable_ref(*particles_->template getVariableByName<Real>(coefficient_name_ref)){};
+	UpdateDiffusivityIncrements(SPHBody &diffusion_body)
+		: ValueAssignment<Real>(diffusion_body, "Increment"),
+		  variable_ref(*particles_->template getVariableByName<Real>("PreviousIncrement")){};
 	void update(size_t index_i, Real dt)
 	{
-		variable_ref[index_i] = variable_[index_i];
+		variable_ref[index_i] = 0.0;//variable_[index_i];
+		variable_[index_i] = 0.0;
 	};
 
 protected:
@@ -186,17 +187,19 @@ public:
 		  eta_(*particles_->template getVariableByName<Real>(coefficient_name))
 	{
 		particles_->registerVariable(change_rate_, "DiffusionCoefficientChangeRate");
-		particles_->registerVariable(eta_ref_, reference_coefficient, [&](size_t i)
-									 { return eta_[i]; });
+		particles_->registerVariable(updated_increment_, "UpdatedIncrement");
+		particles_->registerVariable(increment_, "Increment");
+		particles_->registerVariable(previous_increment_, "PreviousIncrement");
 	};
 	virtual ~CoefficientEvolutionExplicit(){};
 
+	void initialization(size_t index_i, Real dt)
+	{
+		updated_increment_[index_i] = increment_[index_i] + previous_increment_[index_i];
+	};
+
 	void interaction(size_t index_i, Real dt)
 	{
-		Real variable_i = variable_[index_i];
-		Real eta_i = eta_[index_i];
-		Real increment_eta_i = eta_[index_i] - eta_ref_[index_i];
-
 		Real change_rate = source_;
 		const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
 		for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
@@ -204,11 +207,10 @@ public:
 			Real b_ij = 2.0 * inner_neighborhood.dW_ijV_j_[n] / inner_neighborhood.r_ij_[n];
 			size_t index_j = inner_neighborhood.j_[n];
 
-			Real variable_diff = (variable_i - variable_[index_j]);
+			Real variable_diff = (variable_[index_i] - variable_[index_j]);
 			Real variable_diff_abs = ABS(variable_diff);
-			Real increment_eta_j = eta_[index_j] - eta_ref_[index_j];
-			Real coefficient_ave = 0.5 * (increment_eta_i + (eta_[index_j] - eta_ref_[index_j]));
-			Real coefficient_diff = 0.5 * (eta_i - eta_[index_j]);
+			Real coefficient_ave = 0.5 * (updated_increment_[index_i] + updated_increment_[index_j]);
+			Real coefficient_diff = 0.5 * (eta_[index_i] - eta_[index_j]);
 
 			change_rate += b_ij * (coefficient_ave * variable_diff + coefficient_diff * variable_diff_abs);
 		}
@@ -217,9 +219,12 @@ public:
 
 	void update(size_t index_i, Real dt)
 	{
-		Real increment = change_rate_[index_i] * dt;
-		Real theta = increment < 0.0 ? SMIN((0.01 + Eps - eta_[index_i]) / increment, 1.0) : 1.0;
-		eta_[index_i] += increment * theta;
+		Real step_increment = change_rate_[index_i] * dt;
+		Real theta = step_increment < 0.0 ? SMIN((0.01 + Eps - eta_[index_i]) / step_increment, 1.0) : 1.0;
+		step_increment *= theta;
+
+		increment_[index_i] += step_increment;
+		eta_[index_i] += step_increment;
 	};
 
 	void setSource(Real source) { source_ = source; };
@@ -228,7 +233,8 @@ protected:
 	StdLargeVec<Real> &rho_;
 	StdLargeVec<Real> change_rate_;
 	StdLargeVec<Real> &variable_;
-	StdLargeVec<Real> &eta_, eta_ref_; /**< variable damping coefficient */
+	StdLargeVec<Real> &eta_; /**< variable damping coefficient */
+	StdLargeVec<Real> updated_increment_, increment_, previous_increment_;
 	Real source_;
 };
 //----------------------------------------------------------------------
@@ -255,9 +261,6 @@ public:
 	{
 		CoefficientEvolutionExplicit::interaction(index_i, dt);
 
-		Real variable_i = variable_[index_i];
-		Real increment_eta_i = eta_[index_i] - eta_ref_[index_i];
-
 		Real change_rate = 0.0;
 		for (size_t k = 0; k < contact_configuration_.size(); ++k)
 		{
@@ -268,8 +271,8 @@ public:
 				Real b_ij = 2.0 * contact_neighborhood.dW_ijV_j_[n] / contact_neighborhood.r_ij_[n];
 				size_t index_j = contact_neighborhood.j_[n];
 
-				Real variable_diff = (variable_i - variable_k[index_j]);
-				change_rate += b_ij * increment_eta_i * variable_diff;
+				Real variable_diff = (variable_[index_i] - variable_k[index_j]);
+				change_rate += b_ij * updated_increment_[index_i] * variable_diff;
 			}
 		}
 		change_rate_[index_i] += change_rate / rho_[index_i];
@@ -351,10 +354,10 @@ int main()
 	//----------------------------------------------------------------------
 	InteractionSplit<DampingSplittingWithWallCoefficientByParticle<Real>>
 		implicit_heat_transfer_solver(diffusion_body_complex, variable_name, coefficient_name);
-	InteractionWithUpdate<CoefficientEvolutionWithWallExplicit>
+	Dynamics1Level<CoefficientEvolutionWithWallExplicit>
 		coefficient_evolution_with_wall(diffusion_body_complex, variable_name, coefficient_name);
-	SimpleDynamics<ReferenceThermalDiffusivity>
-		update_reference_coefficient(diffusion_body, reference_coefficient);
+	SimpleDynamics<UpdateDiffusivityIncrements>
+		update_coefficient_increments(diffusion_body);
 	//----------------------------------------------------------------------
 	//	Prepare the simulation with cell linked list, configuration
 	//	and case specified initial condition if necessary.
@@ -399,7 +402,7 @@ int main()
 			if (imposing_target)
 			{
 				// target imposing step
-				update_reference_coefficient.parallel_exec();
+				update_coefficient_increments.parallel_exec();
 				for (size_t k = 0; k != target_steps; ++k)
 				{
 					target_source.parallel_exec(dt_coeff);
