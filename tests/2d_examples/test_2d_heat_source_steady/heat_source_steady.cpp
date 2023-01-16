@@ -195,8 +195,6 @@ public:
 		particles_->registerVariable(total_increment_, "TotalIncrement");
 		particles_->registerVariable(updated_increment_, "UpdatedIncrement");
 		particles_->registerVariable(previous_increment_, "PreviousIncrement");
-		particles_->registerVariable(eta_ref0_, "InitialReference");
-		particles_->addVariableToWrite<Real>("InitialReference");
 	};
 	virtual ~CoefficientEvolutionExplicit(){};
 
@@ -204,7 +202,6 @@ public:
 	{
 		updated_increment_[index_i] = eta_[index_i] - eta_ref_[index_i];
 		total_increment_[index_i] = updated_increment_[index_i] + previous_increment_[index_i];
-		eta_ref0_[index_i] = eta_[index_i] - updated_increment_[index_i] - previous_increment_[index_i];
 	};
 
 	void interaction(size_t index_i, Real dt)
@@ -241,7 +238,6 @@ protected:
 	StdLargeVec<Real> &variable_;
 	StdLargeVec<Real> &eta_, eta_ref_; /**< variable damping coefficient */
 	StdLargeVec<Real> total_increment_, updated_increment_, previous_increment_;
-	StdLargeVec<Real> eta_ref0_;
 	Real source_;
 };
 //----------------------------------------------------------------------
