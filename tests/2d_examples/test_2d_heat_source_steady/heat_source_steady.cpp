@@ -195,6 +195,8 @@ public:
 		particles_->registerVariable(total_increment_, "TotalIncrement");
 		particles_->registerVariable(updated_increment_, "UpdatedIncrement");
 		particles_->registerVariable(previous_increment_, "PreviousIncrement");
+		particles_->registerVariable(eta_ref0_, "InitialReference");
+		particles_->addVariableToWrite<Real>("InitialReference");
 	};
 	virtual ~CoefficientEvolutionExplicit(){};
 
@@ -202,13 +204,11 @@ public:
 	{
 		updated_increment_[index_i] = eta_[index_i] - eta_ref_[index_i];
 		total_increment_[index_i] = updated_increment_[index_i] + previous_increment_[index_i];
+		eta_ref0_[index_i] = eta_[index_i] - updated_increment_[index_i] - previous_increment_[index_i];
 	};
 
 	void interaction(size_t index_i, Real dt)
 	{
-		Real variable_i = variable_[index_i];
-		Real eta_i = eta_[index_i];
-
 		Real change_rate = source_;
 		const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
 		for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
@@ -216,10 +216,10 @@ public:
 			Real b_ij = 2.0 * inner_neighborhood.dW_ijV_j_[n] / inner_neighborhood.r_ij_[n];
 			size_t index_j = inner_neighborhood.j_[n];
 
-			Real variable_diff = (variable_i - variable_[index_j]);
+			Real variable_diff = (variable_[index_i] - variable_[index_j]);
 			Real variable_diff_abs = ABS(variable_diff);
 			Real coefficient_ave = 0.5 * (total_increment_[index_i] + total_increment_[index_j]);
-			Real coefficient_diff = 0.5 * (eta_i - eta_[index_j]);
+			Real coefficient_diff = 0.5 * (eta_[index_i] - eta_[index_j]);
 
 			change_rate += b_ij * (coefficient_ave * variable_diff + coefficient_diff * variable_diff_abs);
 		}
@@ -241,6 +241,7 @@ protected:
 	StdLargeVec<Real> &variable_;
 	StdLargeVec<Real> &eta_, eta_ref_; /**< variable damping coefficient */
 	StdLargeVec<Real> total_increment_, updated_increment_, previous_increment_;
+	StdLargeVec<Real> eta_ref0_;
 	Real source_;
 };
 //----------------------------------------------------------------------

@@ -18,7 +18,7 @@ ADD_EXECUTABLE(${PROJECT_NAME} ${DIR_SRCS})
 
 add_test(NAME ${PROJECT_NAME} COMMAND ${PROJECT_NAME}
                   WORKING_DIRECTORY ${EXECUTABLE_OUTPUT_PATH})
-set_tests_properties(${PROJECT_NAME} PROPERTIES LABELS "periodic boundary, diffusion reaction")
+set_tests_properties(${PROJECT_NAME} PROPERTIES LABELS "optimization, diffusion reaction")
 
     set_target_properties(${PROJECT_NAME} PROPERTIES VS_DEBUGGER_WORKING_DIRECTORY "${EXECUTABLE_OUTPUT_PATH}")
     target_link_libraries(${PROJECT_NAME} sphinxsys_2d)
