@@ -114,17 +114,16 @@ public:
 	DiffusivityReferenceAndIncrement(SPHBody &diffusion_body, const std::string &coefficient_name_ref)
 		: ValueAssignment<Real>(diffusion_body, coefficient_name),
 		  variable_ref_(*particles_->template getVariableByName<Real>(coefficient_name_ref)),
-		  updated_increment_(*particles_->template getVariableByName<Real>("UpdatedIncrement")),
 		  previous_increment_(*particles_->template getVariableByName<Real>("PreviousIncrement")){};
 	void update(size_t index_i, Real dt)
 	{
+		previous_increment_[index_i] = variable_[index_i] - variable_ref_[index_i];
 		variable_ref_[index_i] = variable_[index_i];
-		previous_increment_[index_i] = updated_increment_[index_i];
 	};
 
 protected:
 	StdLargeVec<Real> &variable_ref_;
-	StdLargeVec<Real> updated_increment_, previous_increment_;
+	StdLargeVec<Real> previous_increment_;
 };
 //----------------------------------------------------------------------
 //	Equation residue to measure the solution convergence properties.
@@ -192,16 +191,15 @@ public:
 		particles_->registerVariable(change_rate_, "DiffusionCoefficientChangeRate");
 		particles_->registerVariable(eta_ref_, reference_coefficient, [&](size_t i)
 									 { return eta_[i]; });
-		particles_->registerVariable(total_increment_, "TotalIncrement");
 		particles_->registerVariable(updated_increment_, "UpdatedIncrement");
 		particles_->registerVariable(previous_increment_, "PreviousIncrement");
+		particles_->addVariableToWrite<Real>("UpdatedIncrement");
 	};
 	virtual ~CoefficientEvolutionExplicit(){};
 
 	void initialization(size_t index_i, Real dt)
 	{
-		updated_increment_[index_i] = eta_[index_i] - eta_ref_[index_i];
-		total_increment_[index_i] = updated_increment_[index_i] + previous_increment_[index_i];
+		updated_increment_[index_i] = eta_[index_i] - eta_ref_[index_i] + previous_increment_[index_i];
 	};
 
 	void interaction(size_t index_i, Real dt)
@@ -215,7 +213,7 @@ public:
 
 			Real variable_diff = (variable_[index_i] - variable_[index_j]);
 			Real variable_diff_abs = ABS(variable_diff);
-			Real coefficient_ave = 0.5 * (total_increment_[index_i] + total_increment_[index_j]);
+			Real coefficient_ave = 0.5 * (updated_increment_[index_i] + updated_increment_[index_j]);
 			Real coefficient_diff = 0.5 * (eta_[index_i] - eta_[index_j]);
 
 			change_rate += b_ij * (coefficient_ave * variable_diff + coefficient_diff * variable_diff_abs);
@@ -237,7 +235,7 @@ protected:
 	StdLargeVec<Real> change_rate_;
 	StdLargeVec<Real> &variable_;
 	StdLargeVec<Real> &eta_, eta_ref_; /**< variable damping coefficient */
-	StdLargeVec<Real> total_increment_, updated_increment_, previous_increment_;
+	StdLargeVec<Real> updated_increment_, previous_increment_;
 	Real source_;
 };
 //----------------------------------------------------------------------
@@ -275,7 +273,7 @@ public:
 				size_t index_j = contact_neighborhood.j_[n];
 
 				Real variable_diff = (variable_[index_i] - variable_k[index_j]);
-				change_rate += b_ij * total_increment_[index_i] * variable_diff;
+				change_rate += b_ij * updated_increment_[index_i] * variable_diff;
 			}
 		}
 		change_rate_[index_i] += change_rate / rho_[index_i];
