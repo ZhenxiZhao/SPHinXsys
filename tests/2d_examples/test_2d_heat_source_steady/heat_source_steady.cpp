@@ -204,7 +204,7 @@ public:
 
 	void interaction(size_t index_i, Real dt)
 	{
-		Real change_rate = source_;
+		Real change_rate = 0.0;
 		const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
 		for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
 		{
@@ -228,15 +228,12 @@ public:
 		eta_[index_i] += increment * theta;
 	};
 
-	void setSource(Real source) { source_ = source; };
-
 protected:
 	StdLargeVec<Real> &rho_;
 	StdLargeVec<Real> change_rate_;
 	StdLargeVec<Real> &variable_;
 	StdLargeVec<Real> &eta_, eta_ref_; /**< variable damping coefficient */
 	StdLargeVec<Real> updated_increment_, previous_increment_;
-	Real source_;
 };
 //----------------------------------------------------------------------
 //	Evolution of the coefficient to achieve imposed target from the wall
