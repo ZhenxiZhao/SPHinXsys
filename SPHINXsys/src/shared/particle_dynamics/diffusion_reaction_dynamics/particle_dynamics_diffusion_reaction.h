@@ -66,9 +66,6 @@ namespace SPH
 	protected:
 		StdLargeVec<Vecd> &pos_;
 		StdVec<StdLargeVec<Real>> &species_n_;
-
-		/** added by Bo for thermal optimization. */
-		StdLargeVec<Real> &heat_source_, &heat_flux_;
 	};
 
 	/**
@@ -105,8 +102,6 @@ namespace SPH
 		StdVec<BaseDiffusion *> species_diffusion_;
 		StdVec<StdLargeVec<Real>> &species_n_;
 		StdVec<StdLargeVec<Real>> &diffusion_dt_;
-
-		StdLargeVec<Real> &Vol_, &heat_source_;
 
 		void initializeDiffusionChangeRate(size_t particle_i);
 		void getDiffusionChangeRate(size_t particle_i, size_t particle_j, Vecd &e_ij, Real surface_area_ij);
@@ -152,38 +147,6 @@ namespace SPH
 		void interaction(size_t index_i, Real dt = 0.0);
 	};
 
-	/**
-	 * @class RelaxationOfAllDiffusionSpeciesWithBC
-	 * Contact diffusion relaxation with Dirichlet/Neumann BCs.
-	 */
-	template<class BaseParticlesType, class BaseMaterialType,
-		     class ContactBaseParticlesType, class ContactBaseMaterialType, int NUM_SPECIES = 1>
-	class RelaxationOfAllDiffusionSpeciesWithBC
-		: public RelaxationOfAllDiffusionSpeciesComplex<BaseParticlesType, BaseMaterialType, ContactBaseParticlesType, 
-		                                                ContactBaseMaterialType, NUM_SPECIES>
-	{
-		StdLargeVec<Vecd>& n_;
-		StdVec<BaseDiffusion*> species_diffusion_;
-		StdVec<StdLargeVec<Real>>& species_n_;
-		StdVec<StdLargeVec<Real>>& diffusion_dt_;
-		StdVec<StdLargeVec<Real>*> contact_Vol_;
-		StdVec<StdLargeVec<Real>*> contact_heat_flux_;
-		StdVec<StdLargeVec<Vecd>*> contact_n_;
-		StdVec<StdVec<StdLargeVec<Real>>*> contact_species_n_;
-
-	protected:
-		void getDiffusionChangeRateWithDirichlet(size_t particle_i, size_t particle_j, Vecd& e_ij,
-			Real surface_area_ij, const StdVec<StdLargeVec<Real>>& species_n_k);
-		void getDiffusionChangeRateWithNeumann(size_t particle_i, size_t particle_j,
-			Real surface_area_ij_Neumann, StdLargeVec<Real>& heat_flux_k);
-
-	public:
-		typedef ComplexRelation BodyRelationType;
-		explicit RelaxationOfAllDiffusionSpeciesWithBC(ComplexRelation& complex_relation);
-		virtual ~RelaxationOfAllDiffusionSpeciesWithBC() {};
-		void interaction(size_t index_i, Real dt = 0.0);
-	};
-		
 	/**
 	 * @class InitializationRK
 	 * @brief initialization of a runge-kutta integration scheme
@@ -333,9 +296,7 @@ namespace SPH
 			  DiffusionReactionSimpleData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>(sph_body),
 			  diffusion_reaction_material_(this->particles_->diffusion_reaction_material_),
 			  phi_(diffusion_reaction_material_.SpeciesIndexMap()[species_name]),
-			  species_(this->particles_->species_n_[phi_]), heat_flux_(this->particles_->heat_flux_),
-		      species_modified_(this->particles_->species_modified_),
-		      species_recovery_(this->particles_->species_recovery_){};
+			  species_(this->particles_->species_n_[phi_]){};
 		DiffusionReactionSpeciesConstraint(BodyPartByParticle &body_part, const std::string &species_name)
 			: DiffusionReactionSpeciesConstraint(body_part.getSPHBody(), species_name){};
 		virtual ~DiffusionReactionSpeciesConstraint(){};
@@ -344,9 +305,6 @@ namespace SPH
 		DiffusionReaction<BaseMaterialType, NUM_SPECIES> &diffusion_reaction_material_;
 		size_t phi_;
 		StdLargeVec<Real> &species_;
-
-		/** added by Bo for thermal diffusion */
-		StdLargeVec<Real>& heat_flux_, & species_modified_, & species_recovery_;
 	};
 
 	/**
@@ -363,23 +321,17 @@ namespace SPH
 		explicit DiffusionBasedMapping(SPHBody &sph_body)
 			: LocalDynamics(sph_body),
 			  DiffusionReactionSimpleData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>(sph_body),
-			  pos_(this->particles_->pos_), species_n_(this->particles_->species_n_),
-			  heat_flux_(this->particles_->heat_flux_),
-			  species_modified_(this->particles_->species_modified_),
-			  species_recovery_(this->particles_->species_recovery_){};
+			  pos_(this->particles_->pos_), species_n_(this->particles_->species_n_){};
 		virtual ~DiffusionBasedMapping(){};
 
 	protected:
 		StdLargeVec<Vecd> &pos_;
 		StdVec<StdLargeVec<Real>> &species_n_;
-
-		/** added by Bo for thermal diffusion */
-		StdLargeVec<Real> &heat_flux_, &species_modified_, &species_recovery_;
 	};
 
 	/**
 	 * @class 	DiffusionReactionSpeciesSummation
-	 * @brief 	Computing the total averaged temperature on the whole diffusion body.
+	 * @brief 	Computing the total averaged parameter on the whole diffusion body.
 	 * 			TODO: need a test using this method
 	 */
 	template <class BaseParticlesType, class BaseMaterialType, int NUM_SPECIES = 1>
@@ -410,28 +362,6 @@ namespace SPH
 		{
 			return species_n_[phi_][index_i];
 		};
-	};
-
-	/**
-	 * @class DiffusionMaterialPropertyInitialization
-	 * @brief Initialize the property of diffusion material, like random thermal diffusivity.
-	 */
-	template <class BaseParticlesType, class BaseMaterialType, typename VariableType, int NUM_SPECIES = 1>
-	class DiffusionMaterialPropertyInitialization
-		: public LocalDynamics,
-		  public DiffusionReactionSimpleData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>
-	{
-	public:
-		explicit DiffusionMaterialPropertyInitialization(SPHBody& body, const std::string& variable_name)
-			: LocalDynamics(body),
-		  	  DiffusionReactionSimpleData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>(body),
-			  variable_(*this->particles_->template getVariableByName<VariableType>(variable_name)),
-			  pos_(this->particles_->pos_) {};
-		virtual ~DiffusionMaterialPropertyInitialization() {};
-
-	protected:
-		StdLargeVec<VariableType>& variable_;
-		StdLargeVec<Vecd>& pos_;
 	};
 }
 #endif // PARTICLE_DYNAMICS_DIFFUSION_REACTION_H
