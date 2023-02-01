@@ -401,6 +401,7 @@ int main()
 	Real dt_coeff = SMIN(dt, 0.25 * resolution_ref * resolution_ref / reference_temperature);
 	int target_steps = 10; // default number of iteration for imposing target
 	bool imposing_target = true;
+	bool solving_PDE = true;
 	Real allowed_equation_residue = 2.0e5;
 	Real equation_residue_max = Infinity; // initial value
 	//----------------------------------------------------------------------
@@ -415,11 +416,14 @@ int main()
 		Real relaxation_time = 0.0;
 		while (relaxation_time < Observe_time)
 		{
-			// equation solving step
-			thermal_source.parallel_exec(dt);
-			implicit_heat_transfer_solver.parallel_exec(dt);
-			relaxation_time += dt;
-			GlobalStaticVariables::physical_time_ += dt;
+			if (solving_PDE)
+			{
+				// equation solving step
+				thermal_source.parallel_exec(dt);
+				implicit_heat_transfer_solver.parallel_exec(dt);
+				relaxation_time += dt;
+				GlobalStaticVariables::physical_time_ += dt;
+			}
 
 			if (imposing_target)
 			{
@@ -440,10 +444,12 @@ int main()
 			if (residue_max_after_target > equation_residue_max && residue_max_after_target > allowed_equation_residue)
 			{
 				imposing_target = false; // imposing target skipped for next iteration
+				solving_PDE = true;
 			}
 			else
 			{
 				imposing_target = true;
+				solving_PDE = false;
 				equation_residue_max = residue_max_after_target;
 			}
 
