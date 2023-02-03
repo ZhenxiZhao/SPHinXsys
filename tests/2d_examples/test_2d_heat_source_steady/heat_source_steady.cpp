@@ -108,55 +108,22 @@ protected:
 //----------------------------------------------------------------------
 //	Coefficient reference for imposing coefficient evolution.
 //----------------------------------------------------------------------
-class DiffusivityReference : public ValueAssignment<Real>
+class DiffusivityReferenceAndIncrement : public ValueAssignment<Real>
 {
 public:
-	DiffusivityReference(SPHBody &diffusion_body,
-						 const std::string &variable_name, const std::string &variable_name_ref)
-		: ValueAssignment<Real>(diffusion_body, variable_name),
-		  variable_ref_(*particles_->template getVariableByName<Real>(variable_name_ref)){};
+	DiffusivityReferenceAndIncrement(SPHBody &diffusion_body, const std::string &coefficient_name_ref)
+		: ValueAssignment<Real>(diffusion_body, coefficient_name),
+		  variable_ref_(*particles_->template getVariableByName<Real>(coefficient_name_ref)),
+		  previous_increment_(*particles_->template getVariableByName<Real>("PreviousIncrement")){};
 	void update(size_t index_i, Real dt)
 	{
+		previous_increment_[index_i] = variable_[index_i] - variable_ref_[index_i];
 		variable_ref_[index_i] = variable_[index_i];
 	};
 
 protected:
 	StdLargeVec<Real> &variable_ref_;
-};
-
-class DiffusivityIncrement : public ValueAssignment<Real>
-{
-public:
-	DiffusivityIncrement(SPHBody &diffusion_body,
-						 const std::string &variable_name, const std::string &variable_name_ref)
-		: ValueAssignment<Real>(diffusion_body, variable_name),
-		  variable_ref_(*particles_->template getVariableByName<Real>(variable_name_ref)),
-		  previous_increment_(*particles_->template getVariableByName<Real>("PreviousIncrement")){};
-	void update(size_t index_i, Real dt)
-	{
-		previous_increment_[index_i] = (variable_[index_i] - variable_ref_[index_i]);
-	};
-
-protected:
-	StdLargeVec<Real> &variable_ref_;
-	StdLargeVec<Real> &previous_increment_;
-};
-//----------------------------------------------------------------------
-//	Coefficient reference for imposing coefficient evolution.
-//----------------------------------------------------------------------
-class TargetTemperature : public ValueAssignment<Real>
-{
-public:
-	TargetTemperature(SPHBody &diffusion_body, const std::string &phi_ref)
-		: ValueAssignment<Real>(diffusion_body, variable_name),
-		  variable_target_(*particles_->template getVariableByName<Real>(phi_ref)){};
-	void update(size_t index_i, Real dt)
-	{
-		variable_target_[index_i] = variable_[index_i];
-	};
-
-protected:
-	StdLargeVec<Real> &variable_target_;
+	StdLargeVec<Real> previous_increment_;
 };
 //----------------------------------------------------------------------
 //	Equation residue to measure the solution convergence properties.
@@ -226,8 +193,7 @@ public:
 									 { return eta_[i]; });
 		particles_->registerVariable(updated_increment_, "UpdatedIncrement");
 		particles_->registerVariable(previous_increment_, "PreviousIncrement");
-		particles_->addVariableToWrite<Real>("PreviousIncrement");
-		particles_->registerVariable(variable_target_, "TargetTemperature");
+		particles_->addVariableToWrite<Real>("UpdatedIncrement");
 	};
 	virtual ~CoefficientEvolutionExplicit(){};
 
@@ -246,14 +212,11 @@ public:
 			size_t index_j = inner_neighborhood.j_[n];
 
 			Real variable_diff = (variable_[index_i] - variable_[index_j]);
-			Real variable_target_diff = (variable_target_[index_i] - variable_target_[index_j]);
-			Real coefficient_ave = 0.5 * (eta_[index_i] + eta_ref_[index_j] + previous_increment_[index_i] + previous_increment_[index_j]);
-			Real coefficient_ref_ave = 0.5 * (eta_ref_[index_i] + eta_ref_[index_j]);
+			Real variable_diff_abs = ABS(variable_diff);
+			Real coefficient_ave = 0.5 * (updated_increment_[index_i] + updated_increment_[index_j]);
 			Real coefficient_diff = 0.5 * (eta_[index_i] - eta_[index_j]);
-			Real variable_diff_abs = ABS(variable_diff) + 2.0 * ABS(coefficient_diff);
 
-			change_rate += b_ij * (coefficient_ave * variable_target_diff - coefficient_ref_ave * variable_diff +
-								   coefficient_diff * variable_diff_abs);
+			change_rate += b_ij * (coefficient_ave * variable_diff + coefficient_diff * variable_diff_abs);
 		}
 		change_rate_[index_i] = change_rate / rho_[index_i];
 	};
@@ -271,7 +234,6 @@ protected:
 	StdLargeVec<Real> &variable_;
 	StdLargeVec<Real> &eta_, eta_ref_; /**< variable damping coefficient */
 	StdLargeVec<Real> updated_increment_, previous_increment_;
-	StdLargeVec<Real> variable_target_;
 };
 //----------------------------------------------------------------------
 //	Evolution of the coefficient to achieve imposed target from the wall
@@ -308,8 +270,7 @@ public:
 				size_t index_j = contact_neighborhood.j_[n];
 
 				Real variable_diff = (variable_[index_i] - variable_k[index_j]);
-				Real variable_target_diff = (variable_target_[index_i] - variable_k[index_j]);
-				change_rate += b_ij * (eta_[index_i] * variable_target_diff - eta_ref_[index_i] * variable_diff);
+				change_rate += b_ij * updated_increment_[index_i] * variable_diff;
 			}
 		}
 		change_rate_[index_i] += change_rate / rho_[index_i];
@@ -375,6 +336,7 @@ int main()
 	SimpleDynamics<DiffusivityDistribution> coefficient_distribution(diffusion_body);
 	SimpleDynamics<ConstraintTotalScalarAmount> constrain_total_coefficient(diffusion_body, coefficient_name);
 	SimpleDynamics<ImposingSourceTerm<Real>> thermal_source(diffusion_body, variable_name, heat_source);
+	SimpleDynamics<ImposingTargetSource> target_source(diffusion_body, coefficient_name, target_strength);
 	InteractionDynamics<ThermalEquationResidue>
 		thermal_equation_residue(diffusion_body_complex, variable_name, residue_name, coefficient_name, heat_source);
 	ReduceDynamics<MaximumNorm<Real>> maximum_equation_residue(diffusion_body, residue_name);
@@ -392,13 +354,8 @@ int main()
 		implicit_heat_transfer_solver(diffusion_body_complex, variable_name, coefficient_name);
 	Dynamics1Level<CoefficientEvolutionWithWallExplicit>
 		coefficient_evolution_with_wall(diffusion_body_complex, variable_name, coefficient_name);
-	SimpleDynamics<DiffusivityReference>
-		update_reference(diffusion_body, coefficient_name, reference_coefficient);
-	SimpleDynamics<DiffusivityIncrement>
-		update_increment(diffusion_body, coefficient_name, reference_coefficient);
-	SimpleDynamics<TargetTemperature>
-		update_reference_temperature(diffusion_body, "TargetTemperature");
-	SimpleDynamics<ImposingTargetSource> target_source(diffusion_body, "TargetTemperature", target_strength);
+	SimpleDynamics<DiffusivityReferenceAndIncrement>
+		update_reference_and_increment(diffusion_body, reference_coefficient);
 	//----------------------------------------------------------------------
 	//	Prepare the simulation with cell linked list, configuration
 	//	and case specified initial condition if necessary.
@@ -420,7 +377,6 @@ int main()
 	Real dt_coeff = SMIN(dt, 0.25 * resolution_ref * resolution_ref / reference_temperature);
 	int target_steps = 10; // default number of iteration for imposing target
 	bool imposing_target = true;
-	bool solving_PDE = true;
 	Real allowed_equation_residue = 2.0e5;
 	Real equation_residue_max = Infinity; // initial value
 	//----------------------------------------------------------------------
@@ -435,42 +391,34 @@ int main()
 		Real relaxation_time = 0.0;
 		while (relaxation_time < Observe_time)
 		{
-			if (solving_PDE)
-			{
-				// equation solving step
-				thermal_source.parallel_exec(dt);
-				implicit_heat_transfer_solver.parallel_exec(dt);
-				relaxation_time += dt;
-				GlobalStaticVariables::physical_time_ += dt;
-			}
+			// equation solving step
+			thermal_source.parallel_exec(dt);
+			implicit_heat_transfer_solver.parallel_exec(dt);
+			relaxation_time += dt;
+			GlobalStaticVariables::physical_time_ += dt;
 
 			if (imposing_target)
 			{
 				// target imposing step
-				update_reference.parallel_exec();
-				update_reference_temperature.parallel_exec();
-				target_source.parallel_exec(dt);
+				update_reference_and_increment.parallel_exec();
 				for (size_t k = 0; k != target_steps; ++k)
 				{
+					target_source.parallel_exec(dt_coeff);
 					coefficient_evolution_with_wall.parallel_exec(dt_coeff);
 					constrain_total_coefficient.parallel_exec();
 				}
-				update_increment.parallel_exec();
 			}
 
 			// residue evaluation step
 			thermal_equation_residue.parallel_exec();
 			Real residue_max_after_target = maximum_equation_residue.parallel_exec();
-			if (residue_max_after_target > equation_residue_max || residue_max_after_target > allowed_equation_residue)
+			if (residue_max_after_target > equation_residue_max && residue_max_after_target > allowed_equation_residue)
 			{
 				imposing_target = false; // imposing target skipped for next iteration
-				solving_PDE = true;
-				equation_residue_max = residue_max_after_target;
 			}
 			else
 			{
 				imposing_target = true;
-				solving_PDE = false;
 				equation_residue_max = residue_max_after_target;
 			}
 
@@ -481,9 +429,10 @@ int main()
 				std::cout << "Total diffusivity is " << total_coefficient.parallel_exec() << "\n";
 				std::cout << "Average temperature is " << average_temperature.parallel_exec() << "\n";
 				std::cout << "Thermal equation maximum residue is " << equation_residue_max << "\n";
-				write_states.writeToFile(ite);
 			}
 		}
+
+		write_states.writeToFile();
 	}
 
 	std::cout << "The final physical time has finished." << std::endl;
