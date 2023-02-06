@@ -24,7 +24,7 @@
  * @file 	relax_dynamics.h
  * @brief 	This is the classes of particle relaxation in order to produce body fitted
  * 			initial particle distribution.
- * @author	Chi Zhang and Xiangyu Hu
+ * @author	Bo Zhang, Chi Zhang and Xiangyu Hu
  */
 
 #ifndef RELAX_DYNAMICS_H
@@ -191,7 +191,7 @@ namespace SPH
 			explicit RelaxationStepInner(BaseInnerRelation &inner_relation,
 										 bool level_set_correction = false);
 			virtual ~RelaxationStepInner(){};
-			SimpleDynamics<ShapeSurfaceBounding, BodyPartByCell> &SurfaceBounding() { return surface_bounding_; };
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> &SurfaceBounding() { return surface_bounding_; };
 			virtual void exec(Real dt = 0.0) override;
 			virtual void parallel_exec(Real dt = 0.0) override;
 
@@ -202,7 +202,7 @@ namespace SPH
 			UniquePtr<BaseDynamics<void>> relaxation_acceleration_inner_;
 			ReduceDynamics<GetTimeStepSizeSquare> get_time_step_square_;
 			SimpleDynamics<UpdateParticlePosition> update_particle_position_;
-			SimpleDynamics<ShapeSurfaceBounding, BodyPartByCell> surface_bounding_;
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
 		};
 
 		/**
@@ -235,7 +235,7 @@ namespace SPH
 			explicit RelaxationStepComplex(ComplexRelation &body_complex_relation,
 										   const std::string &shape_name, bool level_set_correction = false);
 			virtual ~RelaxationStepComplex(){};
-			SimpleDynamics<ShapeSurfaceBounding, BodyPartByCell> &SurfaceBounding() { return surface_bounding_; };
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> &SurfaceBounding() { return surface_bounding_; };
 			virtual void exec(Real dt = 0.0) override;
 			virtual void parallel_exec(Real dt = 0.0) override;
 
@@ -246,7 +246,59 @@ namespace SPH
 			UniquePtr<BaseDynamics<void>> relaxation_acceleration_complex_;
 			ReduceDynamics<GetTimeStepSizeSquare> get_time_step_square_;
 			SimpleDynamics<UpdateParticlePosition> update_particle_position_;
-			SimpleDynamics<ShapeSurfaceBounding, BodyPartByCell> surface_bounding_;
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
+		};
+
+		struct ErrorAndParameters
+		{
+			Real error_, c_;
+			Vecd a_;
+			ErrorAndParameters() : error_(0), a_(ZeroData<Vecd>::value), c_(0) {};
+		};
+
+		/**
+		 * @class RelaxationPositionEvolutionInner
+		 * @brief carry out particle relaxation by position evolution.
+		 */
+		class RelaxationPositionEvolutionInner
+			: public LocalDynamics,
+			  public RelaxDataDelegateInner
+		{
+		protected:
+		public:
+			explicit RelaxationPositionEvolutionInner(BaseInnerRelation &inner_relation);
+			virtual ~RelaxationPositionEvolutionInner() {};
+			void interaction(size_t index_i, Real dt = 0.0);
+
+		protected:
+			Real W0;
+			StdLargeVec<Real> &Vol_, &mass_, &splitting_tag;
+			StdLargeVec<Vecd>& pos_;
+
+			virtual ErrorAndParameters computeErrorAndParameters(size_t index_i, Real dt = 0.0);
+			virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters& error_and_parameters);
+		};
+
+		/**
+		 * @class RelaxationEvolutionInner
+		 * @brief carry out the particle relaxation evolution within the body
+		 */
+		class RelaxationEvolutionInner : public BaseDynamics<void>
+		{
+		public:
+			explicit RelaxationEvolutionInner(BaseInnerRelation& inner_relation,
+				bool level_set_correction = false);
+			virtual ~RelaxationEvolutionInner() {};
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface>& SurfaceBounding() { return surface_bounding_; };
+			virtual void exec(Real dt = 0.0) override;
+			virtual void parallel_exec(Real dt = 0.0) override;
+
+		protected:
+			RealBody* real_body_;
+			BaseInnerRelation& inner_relation_;
+			NearShapeSurface near_shape_surface_;
+			UniquePtr<BaseDynamics<void>> relaxation_evolution_inner_;
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
 		};
 
 		/**
@@ -375,7 +427,7 @@ namespace SPH
 			virtual ~ShellRelaxationStepInner(){};
 
 			SimpleDynamics<UpdateParticlePosition> update_shell_particle_position_;
-			SimpleDynamics<ShellMidSurfaceBounding, BodyPartByCell> mid_surface_bounding_;
+			SimpleDynamics<ShellMidSurfaceBounding, NearShapeSurface> mid_surface_bounding_;
 
 			virtual void exec(Real dt = 0.0) override;
 			virtual void parallel_exec(Real dt = 0.0) override;

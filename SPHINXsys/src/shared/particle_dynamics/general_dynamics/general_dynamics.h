@@ -40,15 +40,12 @@ namespace SPH
 {
 	typedef DataDelegateSimple<BaseParticles> GeneralDataDelegateSimple;
 	typedef DataDelegateInner<BaseParticles> GeneralDataDelegateInner;
-	typedef DataDelegateContact<BaseParticles, BaseParticles> GeneralDataDelegateContact;
 	typedef DataDelegateContact<BaseParticles, BaseParticles, DataDelegateEmptyBase>
-		GeneralDataDelegateContactOnly;
+		GeneralDataDelegateContact;
 
 	/**
 	 * @class ValueAssignment
-	 * @brief set value for a discrete variable
-	 * @details Note that this class only prepares the data, 
-	 * concrete realization wll be defined in application.  
+	 * @brief set initial condition for a discrete variable
 	 */
 	template <typename DataType>
 	class ValueAssignment : public LocalDynamics, public GeneralDataDelegateSimple
@@ -76,7 +73,6 @@ namespace SPH
 			  variable_(*particles_->getVariableByName<DataType>(variable_name)),
 			  source_strength_(source_strength){};
 		virtual ~ImposingSourceTerm(){};
-		void setSourceStrength(Real source_strength) { source_strength_ = source_strength; };
 		void update(size_t index_i, Real dt)
 		{
 			variable_[index_i] += source_strength_ * dt;
@@ -186,50 +182,6 @@ namespace SPH
 	};
 
 	/**
-	 * @class MaximumNorm
-	 * @brief  obtained the maximum norm of a variable
-	 */
-	template <typename DataType>
-	class MaximumNorm : public LocalDynamicsReduce<Real, ReduceMax>,
-						public GeneralDataDelegateSimple
-	{
-	public:
-		MaximumNorm(SPHBody &sph_body, const std::string &variable_name)
-			: LocalDynamicsReduce<Real, ReduceMax>(sph_body, Real(0)),
-			  GeneralDataDelegateSimple(sph_body),
-			  variable_(*particles_->getVariableByName<DataType>(variable_name)){};
-		virtual ~MaximumNorm(){};
-
-		virtual Real outputResult(Real reduced_value) override { return std::sqrt(reduced_value); }
-		Real reduce(size_t index_i, Real dt = 0.0) { return getSquaredNorm(variable_[index_i]); };
-
-	protected:
-		StdLargeVec<DataType> &variable_;
-	};
-
-	/**
-	 * @class AverageNorm
-	 * @brief obtained the averaged norm of a variable
-	 */
-	template <typename DataType>
-	class AverageNorm : public LocalDynamicsReduce<Real, ReduceSum<DataType>>,
-		                public GeneralDataDelegateSimple
-	{
-	public:
-		AverageNorm(SPHBody& sph_body, const std::string& variable_name)
-			: LocalDynamicsReduce<Real, ReduceSum<DataType>>(sph_body, Real(0)),
-			  GeneralDataDelegateSimple(sph_body),
-			  variable_(*particles_->getVariableByName<DataType>(variable_name)){};
-		virtual ~AverageNorm() {};
-
-		virtual Real outputResult(Real reduced_value) override { return std::sqrt(reduced_value); }
-		Real reduce(size_t index_i, Real dt = 0.0) { return getSquaredNorm(variable_[index_i]); };
-
-	protected:
-		StdLargeVec<DataType>& variable_;
-	};
-
-	/**
 	 * @class VelocityBoundCheck
 	 * @brief  check whether particle velocity within a given bound
 	 */
@@ -330,15 +282,13 @@ namespace SPH
 		StdLargeVec<VariableType> &variable_;
 
 	public:
-		QuantitySummation(SPHBody &sph_body, const std::string &variable_name)
+		explicit QuantitySummation(SPHBody &sph_body, const std::string &variable_name)
 			: LocalDynamicsReduce<VariableType, ReduceSum<VariableType>>(sph_body, ZeroData<VariableType>::value),
 			  GeneralDataDelegateSimple(sph_body),
 			  variable_(*this->particles_->template getVariableByName<VariableType>(variable_name))
 		{
 			this->quantity_name_ = variable_name + "Summation";
 		};
-		QuantitySummation(BodyPartByParticle &body_part, const std::string& variable_name)
-			: QuantitySummation(body_part.getSPHBody(), variable_name) {};
 		virtual ~QuantitySummation(){};
 
 		VariableType reduce(size_t index_i, Real dt = 0.0)
@@ -395,23 +345,6 @@ namespace SPH
 		Real reduce(size_t index_i, Real dt = 0.0);
 	};
 
-	class ConstraintTotalScalarAmount : public LocalDynamics, public GeneralDataDelegateSimple
-	{
-	public:
-		ConstraintTotalScalarAmount(SPHBody &sph_body, const std::string &variable_name);
-		virtual ~ConstraintTotalScalarAmount(){};
-		void setupInitialScalarAmount();
-		void setupDynamics(Real dt = 0.0) override;
-		void update(size_t index_i, Real dt = 0.0);
-
-	protected:
-		StdLargeVec<Real> &variable_;
-		ReduceDynamics<QuantityMoment<Real>> total_scalar_;
-		bool is_initialized_;
-		Real inital_total_;
-		Real increment_;
-	};
-
 	/**
 	 * @class SteadySolutionCheck
 	 * @brief check whether a variable has reached a steady state
@@ -422,7 +355,7 @@ namespace SPH
 	{
 	protected:
 		DataType steady_reference_;
-		const Real criterion_ = 1.0e-8;
+		const Real criterion_ = 1.0e-6;
 
 		StdLargeVec<DataType> &variable_, variable_temp_;
 
@@ -445,7 +378,7 @@ namespace SPH
 		{
 			particles_->registerVariable(variable_temp_, "Temporary" + variable_name,
 										 [&](size_t index_i)
-										 { return 2.0 * variable_[index_i]; });
+										 { return variable_[index_i]; });
 		};
 		virtual ~SteadySolutionCheck(){};
 

@@ -87,12 +87,12 @@ namespace SPH
      * @class ComputeDensityErrorWithWall
      * @brief compute error of particle splitting and merging
      */
-    class ComputeDensityErrorWithWall : public ComputeDensityErrorInner, public GeneralDataDelegateContactOnly
+    class ComputeDensityErrorWithWall : public ComputeDensityErrorInner, public GeneralDataDelegateContact
     {
     public:
         ComputeDensityErrorWithWall(ComplexRelation &complex_relation)
             : ComputeDensityErrorInner(complex_relation.getInnerRelation()),
-              GeneralDataDelegateContactOnly(complex_relation.getContactRelation())
+              GeneralDataDelegateContact(complex_relation.getContactRelation())
         {
             for (size_t k = 0; k != contact_bodies_.size(); ++k)
             {

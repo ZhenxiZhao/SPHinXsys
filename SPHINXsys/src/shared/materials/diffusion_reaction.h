@@ -58,6 +58,7 @@ namespace SPH
 		size_t gradient_species_index_;
 
 		virtual Real getReferenceDiffusivity() = 0;
+		virtual Real getDiffusionCoffWithBoundary(size_t particle_i) = 0;
 		virtual Real getInterParticleDiffusionCoff(size_t particle_i, size_t particle_j, Vecd &direction_from_j_to_i) = 0;
 	};
 
@@ -81,10 +82,39 @@ namespace SPH
 		virtual ~IsotropicDiffusion(){};
 
 		virtual Real getReferenceDiffusivity() override { return diff_cf_; };
+		virtual Real getDiffusionCoffWithBoundary(size_t particle_i) override { return diff_cf_; }
 		virtual Real getInterParticleDiffusionCoff(size_t particle_i, size_t particle_j, Vecd &direction_from_j_to_i) override
 		{
 			return diff_cf_;
 		};
+	};
+
+	/**
+	 * @class LocalIsotropicDiffusion
+	 * @brief diffusion coefficient is locally different
+	 */
+	class LocalIsotropicDiffusion : public IsotropicDiffusion
+	{
+	protected:
+		StdLargeVec<Real> local_thermal_conductivity_;
+		void initializeThermalConductivity();
+
+	public:
+		LocalIsotropicDiffusion(size_t diffusion_species_index, size_t gradient_species_index,
+			                   Real diff_cf = 1.0)
+			: IsotropicDiffusion(diffusion_species_index, gradient_species_index, diff_cf)
+		{
+			material_type_name_ = "LocalIstropicDiffusion";
+		};
+		virtual ~LocalIsotropicDiffusion() {};
+
+		virtual Real getReferenceDiffusivity() override { return diff_cf_; };
+		virtual Real getDiffusionCoffWithBoundary(size_t particle_i) override { return local_thermal_conductivity_[particle_i]; };
+		virtual Real getInterParticleDiffusionCoff(size_t particel_i, size_t particle_j, Vecd& direction_from_j_to_i) override
+		{
+			return 0.5 * (local_thermal_conductivity_[particel_i] + local_thermal_conductivity_[particle_j]);
+		};
+		virtual void assignBaseParticles(BaseParticles* base_particles) override;
 	};
 
 	/**
@@ -145,6 +175,7 @@ namespace SPH
 			material_type_name_ = "LocalDirectionalDiffusion";
 		};
 		virtual ~LocalDirectionalDiffusion(){};
+
 		virtual Real getInterParticleDiffusionCoff(size_t particle_index_i, size_t particle_index_j, Vecd &inter_particle_direction) override
 		{
 			Matd trans_diffusivity = getAverageValue(local_transformed_diffusivity_[particle_index_i], local_transformed_diffusivity_[particle_index_j]);

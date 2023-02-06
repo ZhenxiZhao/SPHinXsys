@@ -50,7 +50,6 @@ namespace SPH
 	protected:
 		virtual ErrorAndParameters<VariableType> computeErrorAndParameters(size_t index_i, Real dt = 0.0);
 		virtual void updateStatesByError(size_t index_i, Real dt, const ErrorAndParameters<VariableType>& error_and_parameters);
-		virtual void updateWithSourceTerm(size_t index_i, Real dt) { this->variable_[index_i] += this->heat_source_[index_i] * dt; }
 		virtual void interaction(size_t index_i, Real dt = 0.0) override;
 	};
 
@@ -69,13 +68,89 @@ namespace SPH
 		TemperatureSplittingByPDEWithBoundary(ComplexRelation& complex_relation, const std::string& variable_name);
 		virtual ~TemperatureSplittingByPDEWithBoundary() {};
 
-	protected:
+	protected: 
 		StdVec<StdLargeVec<VariableType>*> boundary_variable_;
 		StdVec<StdLargeVec<Real>*> boundary_normal_distance_;
+		StdVec<StdLargeVec<Real>*> boundary_heat_flux_;
 		StdVec<StdLargeVec<Vecd>*> boundary_normal_vector_;
 		virtual ErrorAndParameters<VariableType> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override;
-		virtual void updateStatesByError(size_t index_i, Real dt, const ErrorAndParameters<VariableType>& error_and_parameters) override;
 	};
+
+	/**
+	 * @class ImposeSourceTerm
+	 */
+	template <class BaseParticlesType, class BaseMaterialType, typename VariableType, int NUM_SPECIES = 1>
+	class ImposeSourceTerm : public LocalDynamics,
+		                     public DiffusionReactionSimpleData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>
+	{
+	public:
+		ImposeSourceTerm(SPHBody& sph_body, const std::string& variable_name)
+			: LocalDynamics(sph_body),
+			DiffusionReactionSimpleData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>(sph_body),
+			variable_(*this->particles_->template getVariableByName<VariableType>(variable_name)),
+			heat_source_(this->particles_->heat_source_){};
+		virtual ~ImposeSourceTerm() {};
+
+		void update(size_t index_i, Real dt = 0.0)
+		{
+			variable_[index_i] += heat_source_[index_i] * dt;
+		}
+
+	protected:
+		StdLargeVec<Real>& variable_, & heat_source_;
+	};
+
+	/**
+	 * @class ImposeFluxVolumetricSource
+	 */
+	template <class BaseParticlesType, class BaseMaterialType, class ContactBaseParticlesType, 
+		      class ContactBaseMaterialType, typename VariableType, int NUM_SPECIES = 1>
+	class ImposeFluxVolumetricSource : public LocalDynamics,
+		public DiffusionReactionInnerData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>,
+		public DiffusionReactionContactData<BaseParticlesType, BaseMaterialType, ContactBaseParticlesType, ContactBaseMaterialType, NUM_SPECIES>
+	{
+	public:
+		ImposeFluxVolumetricSource(ComplexRelation& body_complex_relation, const std::string& variable_name)
+			: LocalDynamics(body_complex_relation.getInnerRelation().sph_body_),
+			DiffusionReactionInnerData<BaseParticlesType, BaseMaterialType, NUM_SPECIES>(body_complex_relation.getInnerRelation()),
+			DiffusionReactionContactData<BaseParticlesType, BaseMaterialType, ContactBaseParticlesType,
+			ContactBaseMaterialType, NUM_SPECIES>(body_complex_relation.getContactRelation()),
+			variable_(*this->particles_->template getVariableByName<VariableType>(variable_name)),
+			normal_vector_(this->particles_->normal_vector_)
+		{
+			for (size_t k = 0; k != this->contact_particles_.size(); ++k)
+			{
+				boundary_flux_.push_back(&this->contact_particles_[k]->heat_flux_);
+				boundary_normal_vector_.push_back(&this->contact_particles_[k]->normal_vector_);
+			}
+		};
+		virtual ~ImposeFluxVolumetricSource() {};
+
+		void interaction(size_t index_i, Real dt = 0.0)
+		{
+			Real change_rate = 0.0;
+			for (size_t k = 0; k < this->contact_configuration_.size(); ++k)
+			{
+				const StdLargeVec<Real>& heat_flux_k = *(boundary_flux_[k]);
+				const StdLargeVec<Vecd>& normal_vector_k = *(boundary_normal_vector_[k]);
+				const Neighborhood& contact_neighborhood = (*this->contact_configuration_[k])[index_i];
+				for (size_t n = 0; n != contact_neighborhood.current_size_; ++n)
+				{
+					size_t index_j = contact_neighborhood.j_[n];
+					Vecd n_ij = normal_vector_[index_i] - normal_vector_k[index_j];
+					change_rate += heat_flux_k[index_j] * contact_neighborhood.dW_ijV_j_[n] * contact_neighborhood.e_ij_[n].dot(n_ij);
+				}
+			}
+			variable_[index_i] += change_rate * dt;
+		}
+
+	protected:
+		StdLargeVec<Real>& variable_;
+		StdLargeVec<Vecd>& normal_vector_;
+		StdVec<StdLargeVec<Real>*> boundary_flux_;
+		StdVec<StdLargeVec<Vecd>*> boundary_normal_vector_;
+	};
+		                              
 
 	/**
 	 * @class UpdateTemperaturePDEResidual
