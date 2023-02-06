@@ -64,7 +64,7 @@ public:
 		  pos_(particles_->pos_){};
 	void update(size_t index_i, Real dt)
 	{
-		variable_[index_i] = 375.0 + 25.0 * (((double)rand() / (RAND_MAX)) - 0.5) * 2.0;
+		variable_[index_i] = 375.0;
 	};
 
 protected:
@@ -104,6 +104,22 @@ public:
 
 protected:
 	StdLargeVec<Vecd> &pos_;
+};
+class ThermalEquationWithSource : public DampingSplittingWithWallCoefficientByParticle<Real>
+{
+public:
+		ThermalEquationWithSource(ComplexRelation& complex_wall_relation,
+			const std::string& variable_name, const std::string& coefficient_name)
+		: DampingSplittingWithWallCoefficientByParticle<Real>(complex_wall_relation, variable_name, coefficient_name) {};
+protected:
+	virtual ErrorAndParameters<Real> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override
+	{
+		ErrorAndParameters<Real> error_and_parameters = 
+			DampingSplittingWithWallCoefficientByParticle<Real>::computeErrorAndParameters(index_i, dt);
+		error_and_parameters.error_ -= heat_source * mass_[index_i] * dt;
+
+		return error_and_parameters;
+	};
 };
 //----------------------------------------------------------------------
 //	Coefficient reference for imposing coefficient evolution.
@@ -178,11 +194,16 @@ public:
 		: LocalDynamics(sph_body), GeneralDataDelegateSimple(sph_body),
 		  variable_(*particles_->getVariableByName<Real>(variable_name)),
 		  source_strength_(source_strength),
-		  source_strength__min_(0.1 * source_strength){};
+		  source_strength_min_(0.1 * source_strength){};
 	virtual ~ImposingTargetSource(){};
+	void setSourceStrength(Real strength)
+	{
+		source_strength_ = strength;
+	};
+
 	void rescaleSourceStrength(Real scale_factor)
 	{
-		source_strength_ = SMAX(source_strength_ * scale_factor, source_strength__min_);
+		source_strength_ = SMAX(source_strength_ * scale_factor, source_strength_min_);
 	};
 	void update(size_t index_i, Real dt)
 	{
@@ -193,7 +214,7 @@ public:
 
 protected:
 	StdLargeVec<Real> &variable_;
-	Real source_strength_, source_strength__min_;
+	Real source_strength_, source_strength_min_;
 };
 //----------------------------------------------------------------------
 //	Evolution of the coefficient to achieve imposed target
@@ -314,7 +335,7 @@ int main()
 	//----------------------------------------------------------------------
 	SolidBody diffusion_body(
 		sph_system, makeShared<TransformShape<GeometricShapeBox>>(
-						Transform2d(block_translation), block_halfsize, "DiffusionBody"));
+			Transform2d(block_translation), block_halfsize, "DiffusionBody"));
 	diffusion_body.defineParticlesAndMaterial<SolidParticles, Solid>();
 	diffusion_body.generateParticles<ParticleGeneratorLattice>();
 	//----------------------------------------------------------------------
@@ -346,7 +367,7 @@ int main()
 	//	The contact map gives the topological connections between the bodies.
 	//	Basically the range of bodies to build neighbor particle lists.
 	//----------------------------------------------------------------------
-	ComplexRelation diffusion_body_complex(diffusion_body, {&isothermal_boundaries});
+	ComplexRelation diffusion_body_complex(diffusion_body, { &isothermal_boundaries });
 	//----------------------------------------------------------------------
 	//	Define the main numerical methods used in the simulation.
 	//	Note that there may be data dependence on the constructors of these methods.
@@ -355,13 +376,13 @@ int main()
 	SimpleDynamics<IsothermalBoundariesConstraints> boundary_constraint(isothermal_boundaries);
 	SimpleDynamics<DiffusivityDistribution> coefficient_distribution(diffusion_body);
 	SimpleDynamics<ConstraintTotalScalarAmount> constrain_total_coefficient(diffusion_body, coefficient_name);
-	SimpleDynamics<ImposingSourceTerm<Real>> thermal_source(diffusion_body, variable_name, heat_source);
 	SimpleDynamics<ImposingTargetSource> target_source(diffusion_body, coefficient_name, target_strength);
 	InteractionDynamics<ThermalEquationResidue>
 		thermal_equation_residue(diffusion_body_complex, variable_name, residue_name, coefficient_name, heat_source);
 	ReduceDynamics<MaximumNorm<Real>> maximum_equation_residue(diffusion_body, residue_name);
 	ReduceDynamics<QuantityMoment<Real>> total_coefficient(diffusion_body, coefficient_name);
 	ReduceAverage<QuantitySummation<Real>> average_temperature(diffusion_body, variable_name);
+	ReduceDynamics<QuantitySummation<Real>> residue_summation(diffusion_body, residue_name);
 	//----------------------------------------------------------------------
 	//	Define the methods for I/O operations and observations of the simulation.
 	//----------------------------------------------------------------------
@@ -370,12 +391,14 @@ int main()
 	//----------------------------------------------------------------------
 	//	Thermal diffusivity optimization
 	//----------------------------------------------------------------------
-	InteractionSplit<DampingSplittingWithWallCoefficientByParticle<Real>>
+	InteractionSplit<ThermalEquationWithSource>
 		implicit_heat_transfer_solver(diffusion_body_complex, variable_name, coefficient_name);
 	Dynamics1Level<CoefficientEvolutionWithWallExplicit>
 		coefficient_evolution_with_wall(diffusion_body_complex, variable_name, coefficient_name);
 	SimpleDynamics<DiffusivityReference>
 		update_coefficient_reference(diffusion_body, coefficient_name, reference_coefficient);
+	SimpleDynamics<DiffusivityReference>
+		reset_coefficient(diffusion_body, reference_coefficient, coefficient_name);
 	SimpleDynamics<DiffusivityIncrement>
 		update_coefficient_increment(diffusion_body, coefficient_name, reference_coefficient);
 	//----------------------------------------------------------------------
@@ -393,7 +416,7 @@ int main()
 	//	Setup for time-stepping control
 	//----------------------------------------------------------------------
 	int ite = 0;
-	Real End_Time = 5.0;
+	Real End_Time = 50.0;
 	Real Observe_time = 0.01 * End_Time;
 	Real dt = 1.0e-4;
 	Real dt_coeff = SMIN(dt, 0.25 * resolution_ref * resolution_ref / reference_temperature);
@@ -401,9 +424,12 @@ int main()
 	bool imposing_target = true;
 	size_t imposing_target_steps = 0;
 	bool imposing_PDE = true;
-	Real allowed_equation_residue = 2.0e5;
+	Real allowed_equation_residue = 10.0;
 	size_t continuously_failing_allowed_residue_count = 0;
 	Real equation_residue_max = Infinity; // initial value
+	Real totoal_dissipation_before = 0.0;
+	Real current_totoal_dissipation = 0.0;
+
 	//----------------------------------------------------------------------
 	//	First output before the main loop.
 	//----------------------------------------------------------------------
@@ -416,27 +442,38 @@ int main()
 		Real relaxation_time = 0.0;
 		while (relaxation_time < Observe_time)
 		{
-			if (imposing_PDE)
-			{
-				// equation solving step
-				thermal_source.parallel_exec(dt);
-				implicit_heat_transfer_solver.parallel_exec(dt);
-				relaxation_time += dt;
-				GlobalStaticVariables::physical_time_ += dt;
-			}
+			// equation solving step
+			implicit_heat_transfer_solver.parallel_exec(dt);
+			relaxation_time += dt;
+			GlobalStaticVariables::physical_time_ += dt;
 
 			if (imposing_target)
 			{
 				// target imposing step
 				update_coefficient_reference.parallel_exec();
-				for (size_t k = 0; k != target_steps; ++k)
+				thermal_equation_residue.parallel_exec();
+				totoal_dissipation_before = residue_summation.parallel_exec();
+				current_totoal_dissipation = totoal_dissipation_before + 1.0e6;
+				target_source.setSourceStrength(target_strength);
+				while (current_totoal_dissipation > totoal_dissipation_before)
 				{
-					target_source.parallel_exec(dt_coeff);
-					coefficient_evolution_with_wall.parallel_exec(dt_coeff);
-					constrain_total_coefficient.parallel_exec();
+					for (size_t k = 0; k != target_steps; ++k)
+					{
+						target_source.parallel_exec(dt_coeff);
+						coefficient_evolution_with_wall.parallel_exec(dt_coeff);
+						constrain_total_coefficient.parallel_exec();
+					}
+					// residue evaluation step
+					thermal_equation_residue.parallel_exec();
+					current_totoal_dissipation = residue_summation.parallel_exec();
+					if (current_totoal_dissipation > totoal_dissipation_before)
+					{
+						target_source.rescaleSourceStrength(0.5);
+						reset_coefficient.parallel_exec();
+					}
+					imposing_target_steps++;
 				}
 				update_coefficient_increment.parallel_exec();
-				imposing_target_steps++;
 			}
 
 			// residue evaluation step
@@ -445,20 +482,11 @@ int main()
 			if (current_residue_max > equation_residue_max && current_residue_max > allowed_equation_residue)
 			{
 				imposing_target = false; // imposing target skipped for next iteration
-				imposing_PDE = true;
-				continuously_failing_allowed_residue_count++;
-				if (continuously_failing_allowed_residue_count == 500)
-				{
-					continuously_failing_allowed_residue_count = 0;
-					target_source.rescaleSourceStrength(0.9);
-				}
 			}
 			else
 			{
 				imposing_target = true;
-				imposing_PDE = false;
 				equation_residue_max = current_residue_max;
-				continuously_failing_allowed_residue_count = 0;
 			}
 
 			ite++;
@@ -466,7 +494,9 @@ int main()
 			{
 				std::cout << "N= " << ite << " Time: " << GlobalStaticVariables::physical_time_ << "	dt: " << dt << "\n";
 				std::cout << "Steps imposed learning is " << imposing_target_steps << ".  ";
-				std::cout << "Total diffusivity is " << total_coefficient.parallel_exec() << ".  ";
+				std::cout << "Total diffusivity is " << total_coefficient.parallel_exec() << ". \n ";
+				std::cout << "Current dissipation is " << current_totoal_dissipation << ".  ";
+				std::cout << "Dissipation before is " << totoal_dissipation_before << ".  ";
 				std::cout << "Average temperature is " << average_temperature.parallel_exec() << "\n";
 				std::cout << "Thermal equation maximum residue is " << equation_residue_max << ".  ";
 				std::cout << "Allowed equation maximum residue is " << allowed_equation_residue << "\n";
