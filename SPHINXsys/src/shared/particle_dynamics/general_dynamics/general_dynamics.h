@@ -308,13 +308,15 @@ namespace SPH
 		StdLargeVec<VariableType> &variable_;
 
 	public:
-		explicit QuantitySummation(SPHBody &sph_body, const std::string &variable_name)
+		QuantitySummation(SPHBody &sph_body, const std::string &variable_name)
 			: LocalDynamicsReduce<VariableType, ReduceSum<VariableType>>(sph_body, ZeroData<VariableType>::value),
 			  GeneralDataDelegateSimple(sph_body),
 			  variable_(*this->particles_->template getVariableByName<VariableType>(variable_name))
 		{
 			this->quantity_name_ = variable_name + "Summation";
 		};
+		QuantitySummation(BodyPartByParticle& body_part, const std::string& species_name)
+			: QuantitySummation(body_part.getSPHBody(), species_name) {};
 		virtual ~QuantitySummation(){};
 
 		VariableType reduce(size_t index_i, Real dt = 0.0)

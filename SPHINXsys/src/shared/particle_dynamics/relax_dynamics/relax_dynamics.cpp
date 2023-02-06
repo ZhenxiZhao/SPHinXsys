@@ -235,103 +235,103 @@ namespace SPH
 			update_particle_position_.parallel_exec(dt_square);
 			surface_bounding_.parallel_exec();
 		}
-		//=================================================================================================//
-		RelaxationPositionEvolutionInner::RelaxationPositionEvolutionInner(BaseInnerRelation& inner_relation)
-			: LocalDynamics(inner_relation.sph_body_), RelaxDataDelegateInner(inner_relation),
-			  W0(sph_body_.sph_adaptation_->getKernel()->W0(zero_vec)), Vol_(particles_->Vol_), 
-			  mass_(particles_->mass_), pos_(particles_->pos_),
-			  splitting_tag(*particles_->getVariableByName<Real>("Splitting_tag")) {};
-		//=================================================================================================//
-		ErrorAndParameters RelaxationPositionEvolutionInner::computeErrorAndParameters(size_t index_i, Real dt)
-		{
-			ErrorAndParameters error_and_parameters;
-			Neighborhood& inner_neighborhood = inner_configuration_[index_i];
-			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
-			{
-				size_t index_j = inner_neighborhood.j_[n]; 
-				Vecd parameter_b = inner_neighborhood.dW_ijV_j_[n] * inner_neighborhood.e_ij_[n] * dt;
-			
-				error_and_parameters.error_ -= Vol_[index_j] * inner_neighborhood.W_ij_[n] * dt;
-				error_and_parameters.a_ += parameter_b;
-				error_and_parameters.c_ += parameter_b.dot(parameter_b);
-			}
-			error_and_parameters.error_ += (1 - Vol_[index_i] * W0) * dt;
-			//Vecd evolution = Vecd::Ones();
-			//error_and_parameters.a_ -= -inner_neighborhood.e_ij_[index_i];
-			return error_and_parameters;
-		}
-		//=================================================================================================//
-		void RelaxationPositionEvolutionInner::updateStates(size_t index_i, Real dt, 
-			 const ErrorAndParameters& error_and_parameters)
-		{
-			ErrorAndParameters error_and_parameters_after;
+		////=================================================================================================//
+		//RelaxationPositionEvolutionInner::RelaxationPositionEvolutionInner(BaseInnerRelation& inner_relation)
+		//	: LocalDynamics(inner_relation.sph_body_), RelaxDataDelegateInner(inner_relation),
+		//	  W0(sph_body_.sph_adaptation_->getKernel()->W0(zero_vec)), Vol_(particles_->Vol_), 
+		//	  mass_(particles_->mass_), pos_(particles_->pos_),
+		//	  splitting_tag(*particles_->getVariableByName<Real>("Splitting_tag")) {};
+		////=================================================================================================//
+		//ErrorAndParameters RelaxationPositionEvolutionInner::computeErrorAndParameters(size_t index_i, Real dt)
+		//{
+		//	ErrorAndParameters error_and_parameters;
+		//	Neighborhood& inner_neighborhood = inner_configuration_[index_i];
+		//	for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
+		//	{
+		//		size_t index_j = inner_neighborhood.j_[n]; 
+		//		Vecd parameter_b = inner_neighborhood.dW_ijV_j_[n] * inner_neighborhood.e_ij_[n] * dt;
+		//	
+		//		error_and_parameters.error_ -= Vol_[index_j] * inner_neighborhood.W_ij_[n] * dt;
+		//		error_and_parameters.a_ += parameter_b;
+		//		error_and_parameters.c_ += parameter_b.dot(parameter_b);
+		//	}
+		//	error_and_parameters.error_ += (1 - Vol_[index_i] * W0) * dt;
+		//	//Vecd evolution = Vecd::Ones();
+		//	//error_and_parameters.a_ -= -inner_neighborhood.e_ij_[index_i];
+		//	return error_and_parameters;
+		//}
+		////=================================================================================================//
+		//void RelaxationPositionEvolutionInner::updateStates(size_t index_i, Real dt, 
+		//	 const ErrorAndParameters& error_and_parameters)
+		//{
+		//	ErrorAndParameters error_and_parameters_after;
 
-			Real parameter_l = error_and_parameters.a_.dot(error_and_parameters.a_) + error_and_parameters.c_;
-			Real parameter_k = error_and_parameters.error_ / (parameter_l + TinyReal);
+		//	Real parameter_l = error_and_parameters.a_.dot(error_and_parameters.a_) + error_and_parameters.c_;
+		//	Real parameter_k = error_and_parameters.error_ / (parameter_l + TinyReal);
 
-			pos_[index_i] += parameter_k * error_and_parameters.a_;
+		//	pos_[index_i] += parameter_k * error_and_parameters.a_;
 
-		/*	Vecd& pos_i = pos_[index_i];
-			Neighborhood& inner_neighborhood = inner_configuration_[index_i];
-			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
-			{
-				size_t index_j = inner_neighborhood.j_[n];
-				Vecd parameter_b = inner_neighborhood.dW_ijV_j_[n] * inner_neighborhood.e_ij_[n] * dt;
+		///*	Vecd& pos_i = pos_[index_i];
+		//	Neighborhood& inner_neighborhood = inner_configuration_[index_i];
+		//	for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
+		//	{
+		//		size_t index_j = inner_neighborhood.j_[n];
+		//		Vecd parameter_b = inner_neighborhood.dW_ijV_j_[n] * inner_neighborhood.e_ij_[n] * dt;
 
-				Vecd pos_j = pos_[index_j] - parameter_k * parameter_b;
-				Vecd pos_derivative = (pos_i - pos_j);
+		//		Vecd pos_j = pos_[index_j] - parameter_k * parameter_b;
+		//		Vecd pos_derivative = (pos_i - pos_j);
 
-				pos_[index_j] -= pos_derivative.squaredNorm() * parameter_b;
-			}*/
-		}
-		//=================================================================================================//
-		void RelaxationPositionEvolutionInner::interaction(size_t index_i, Real dt)
-		{
-			ErrorAndParameters error_and_parameters = computeErrorAndParameters(index_i, dt);
-			if(error_and_parameters.error_ > 0)
-			{
-				///*error_and_parameters.error_ *= -1;*/
-				updateStates(index_i, -dt, error_and_parameters);
-			}
-			else
-			{
-				updateStates(index_i, dt, error_and_parameters);
-			}
-		}
-		//=================================================================================================//
-		RelaxationEvolutionInner::
-			RelaxationEvolutionInner(BaseInnerRelation& inner_relation, bool level_set_correction)
-			: BaseDynamics<void>(), real_body_(inner_relation.real_body_),
-			inner_relation_(inner_relation), near_shape_surface_(*real_body_),
-			surface_bounding_(near_shape_surface_)
-		{
-			if(!level_set_correction)
-			{
-				relaxation_evolution_inner_ =
-					std::move(makeUnique<InteractionSplit<RelaxationPositionEvolutionInner>>(inner_relation));
-			}
-			else
-			{
-				relaxation_evolution_inner_ =
-					std::move(makeUnique<InteractionSplit<RelaxationPositionEvolutionInner>>(inner_relation));
-			}
-		}
-		//=================================================================================================//
-		void RelaxationEvolutionInner::exec(Real dt)
-		{
-			real_body_->updateCellLinkedList();
-			inner_relation_.updateConfiguration();
-			relaxation_evolution_inner_->exec(dt);
-			surface_bounding_.exec();
-		}
-		//=================================================================================================//
-		void RelaxationEvolutionInner::parallel_exec(Real dt)
-		{
-			real_body_->updateCellLinkedList();
-			inner_relation_.updateConfiguration();
-			relaxation_evolution_inner_->parallel_exec(dt);
-			surface_bounding_.parallel_exec();
-		}
+		//		pos_[index_j] -= pos_derivative.squaredNorm() * parameter_b;
+		//	}*/
+		//}
+		////=================================================================================================//
+		//void RelaxationPositionEvolutionInner::interaction(size_t index_i, Real dt)
+		//{
+		//	ErrorAndParameters error_and_parameters = computeErrorAndParameters(index_i, dt);
+		//	if(error_and_parameters.error_ > 0)
+		//	{
+		//		///*error_and_parameters.error_ *= -1;*/
+		//		updateStates(index_i, -dt, error_and_parameters);
+		//	}
+		//	else
+		//	{
+		//		updateStates(index_i, dt, error_and_parameters);
+		//	}
+		//}
+		////=================================================================================================//
+		//RelaxationEvolutionInner::
+		//	RelaxationEvolutionInner(BaseInnerRelation& inner_relation, bool level_set_correction)
+		//	: BaseDynamics<void>(), real_body_(inner_relation.real_body_),
+		//	inner_relation_(inner_relation), near_shape_surface_(*real_body_),
+		//	surface_bounding_(near_shape_surface_)
+		//{
+		//	if(!level_set_correction)
+		//	{
+		//		relaxation_evolution_inner_ =
+		//			std::move(makeUnique<InteractionSplit<RelaxationPositionEvolutionInner>>(inner_relation));
+		//	}
+		//	else
+		//	{
+		//		relaxation_evolution_inner_ =
+		//			std::move(makeUnique<InteractionSplit<RelaxationPositionEvolutionInner>>(inner_relation));
+		//	}
+		//}
+		////=================================================================================================//
+		//void RelaxationEvolutionInner::exec(Real dt)
+		//{
+		//	real_body_->updateCellLinkedList();
+		//	inner_relation_.updateConfiguration();
+		//	relaxation_evolution_inner_->exec(dt);
+		//	surface_bounding_.exec();
+		//}
+		////=================================================================================================//
+		//void RelaxationEvolutionInner::parallel_exec(Real dt)
+		//{
+		//	real_body_->updateCellLinkedList();
+		//	inner_relation_.updateConfiguration();
+		//	relaxation_evolution_inner_->parallel_exec(dt);
+		//	surface_bounding_.parallel_exec();
+		//}
 		//=================================================================================================//
 		ShellMidSurfaceBounding::
 			ShellMidSurfaceBounding(NearShapeSurface &body_part, BaseInnerRelation &inner_relation,

@@ -58,13 +58,18 @@ public:
 		add<TransformShape<GeometricShapeBox>>(Transform2d(lower_constraint_translation), constraint_halfsize);
 	}
 };
-std::vector<Vecd> flux_boundary_domain{
-	Vecd(0.45*L,0), Vecd(0.45*L, resolution_ref), Vecd(0.55 * L, resolution_ref),
-	Vecd(0.55 * L, 0), Vecd(0.45 * L, 0) };
-MultiPolygon createFluxBoundaryDomain()
+
+std::vector<Vecd> flux_boundary_inner_region
+{
+	Vecd(0.45 * L,0), Vecd(0.45 * L, resolution_ref), 
+	Vecd(0.55 * L, resolution_ref),
+	Vecd(0.55 * L, 0), Vecd(0.45 * L, 0) 
+};
+
+MultiPolygon createFluxBoundaryInnerRegion()
 {
 	MultiPolygon multi_polygon;
-	multi_polygon.addAPolygon(flux_boundary_domain, ShapeBooleanOps::add);
+	multi_polygon.addAPolygon(flux_boundary_inner_region, ShapeBooleanOps::add);
 	return multi_polygon;
 }
 //----------------------------------------------------------------------
@@ -143,18 +148,18 @@ protected:
 //----------------------------------------------------------------------
 //	Boundary unit normal vector.
 //----------------------------------------------------------------------
-class UpdateUnitNormalVector : public LocalDynamics,
-							   public DissipationDataInner,
-						  	   public DissipationDataContact
+class UpdateNormalVector : public LocalDynamics,
+	                       public DissipationDataInner,
+ 	                       public DissipationDataContact							   
 {
 public:
-	UpdateUnitNormalVector(ComplexRelation& body_complex_relation, 
+	UpdateNormalVector(ComplexRelation& body_complex_relation, 
 		                   const std::string& variable_name) 
 		: LocalDynamics(body_complex_relation.getInnerRelation().sph_body_),
 		  DissipationDataInner(body_complex_relation.getInnerRelation()),
 		  DissipationDataContact(body_complex_relation.getContactRelation()),
 		  unit_normal_vector_(*particles_->getVariableByName<Vecd>(variable_name)) {};
-	virtual ~UpdateUnitNormalVector() {};
+	virtual ~UpdateNormalVector() {};
 
 	void interaction(size_t index_i, Real dt = 0.0)
 	{
@@ -176,25 +181,49 @@ protected:
 	StdLargeVec<Vecd>& unit_normal_vector_;
 };
 //----------------------------------------------------------------------
-//	Coefficient reference for imposing coefficient evolution.
+//	Impose heat flux boundary condition by volumetric source.
 //----------------------------------------------------------------------
-class DiffusivityReferenceAndIncrement : public ValueAssignment<Real>
+class ThermalSolverWithFluxBoundary : public DampingSplittingWithWallCoefficientByParticle<Real>
 {
 public:
-	DiffusivityReferenceAndIncrement(SPHBody &diffusion_body, const std::string &coefficient_name_ref)
-		: ValueAssignment<Real>(diffusion_body, coefficient_name),
-		  variable_ref_(*particles_->template getVariableByName<Real>(coefficient_name_ref)),
-		  updated_increment_(*particles_->template getVariableByName<Real>("UpdatedIncrement")),
-		  previous_increment_(*particles_->template getVariableByName<Real>("PreviousIncrement")){};
-	void update(size_t index_i, Real dt)
+	ThermalSolverWithFluxBoundary(ComplexRelation& complex_wall_relation,
+		const std::string& variable_name, const std::string& eta) :
+		DampingSplittingWithWallCoefficientByParticle<Real>(complex_wall_relation, variable_name, eta),
+		normal_vector_(*particles_->getVariableByName<Vecd>(normal_vector))
 	{
-		variable_ref_[index_i] = variable_[index_i];
-		previous_increment_[index_i] = updated_increment_[index_i];
+		for (size_t k = 0; k != this->contact_particles_.size(); ++k)
+		{
+			boundary_flux_.push_back(this->contact_particles_[k]->template getVariableByName<Real>(flux_name));
+			boundary_normal_vector_.push_back(this->contact_particles_[k]->template getVariableByName<Vecd>(normal_vector));
+		}
 	};
 
+	virtual ~ThermalSolverWithFluxBoundary() {};
+
+	virtual ErrorAndParameters<Real> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override
+	{
+		ErrorAndParameters<Real> error_and_parameters =
+			DampingSplittingWithWallCoefficientByParticle<Real>::computeErrorAndParameters(index_i, dt);
+
+		for (size_t k = 0; k < this->contact_configuration_.size(); ++k)
+		{
+			const StdLargeVec<Real>& heat_flux_k = *(boundary_flux_[k]);
+			const StdLargeVec<Vecd>& normal_vector_k = *(boundary_normal_vector_[k]);
+			const Neighborhood& contact_neighborhood = (*this->contact_configuration_[k])[index_i];
+			for (size_t n = 0; n != contact_neighborhood.current_size_; ++n)
+			{
+				size_t index_j = contact_neighborhood.j_[n];
+				error_and_parameters.error_ -= heat_flux_k[index_j] * contact_neighborhood.dW_ijV_j_[n] * this->mass_[index_i]*
+					contact_neighborhood.e_ij_[n].dot(normal_vector_[index_i] - normal_vector_k[index_j]) * dt;
+			}
+		}
+		return error_and_parameters;
+	}
+
 protected:
-	StdLargeVec<Real> &variable_ref_;
-	StdLargeVec<Real> updated_increment_, previous_increment_;
+	StdLargeVec<Vecd>& normal_vector_;
+	StdVec<StdLargeVec<Real>*> boundary_flux_;
+	StdVec<StdLargeVec<Vecd>*> boundary_normal_vector_;
 };
 //----------------------------------------------------------------------
 //	Equation residue to measure the solution convergence properties.
@@ -238,198 +267,11 @@ public:
 			for (size_t n = 0; n != contact_neighborhood.current_size_; ++n)
 			{
 				size_t index_j = contact_neighborhood.j_[n];
-				residue_[index_i] += 2.0 * heat_flux_k[index_j] * contact_neighborhood.dW_ijV_j_[n] / 
-					contact_neighborhood.e_ij_[n].dot(normal_vector_k[n]);
+				residue_[index_i] += 2.0 * heat_flux_k[index_j] * contact_neighborhood.dW_ijV_j_[n] *
+					contact_neighborhood.e_ij_[n].dot(-normal_vector_k[n]-normal_vector_k[n]);
 			}
 		}
 	};
-protected:
-	StdVec<StdLargeVec<Real>*> wall_flux_;
-	StdVec<StdLargeVec<Vecd>*> wall_normal_vector_;
-};
-//----------------------------------------------------------------------
-//	Source term for impose optimization target.
-//----------------------------------------------------------------------
-class ImposingTargetSource : public LocalDynamics, public GeneralDataDelegateSimple
-{
-public:
-	ImposingTargetSource(SPHBody &sph_body, const std::string &variable_name, const Real &source_strength)
-		: LocalDynamics(sph_body), GeneralDataDelegateSimple(sph_body),
-		  variable_(*particles_->getVariableByName<Real>(variable_name)),
-		  source_strength_(source_strength){};
-	ImposingTargetSource(BodyPartByParticle& body_part, const std::string& variable_name, const Real& source_strength)
-		: ImposingTargetSource(body_part.getSPHBody(), variable_name, source_strength) {};
-	virtual ~ImposingTargetSource(){};
-	void setSourceStrength(Real source_strength) { source_strength_ = source_strength; };
-	void update(size_t index_i, Real dt)
-	{
-		Real increment = source_strength_ * dt;
-		Real theta = increment < 0.0 ? SMIN((0.01 + Eps - variable_[index_i]) / increment, 1.0) : 1.0;
-		variable_[index_i] += increment * theta;
-	};
-
-protected:
-	StdLargeVec<Real> &variable_;
-	Real source_strength_;
-};
-//----------------------------------------------------------------------
-//	Evolution of the coefficient to achieve imposed target
-//----------------------------------------------------------------------
-class CoefficientEvolutionExplicit : public LocalDynamics, public DissipationDataInner
-{
-public:
-	CoefficientEvolutionExplicit(BaseInnerRelation &inner_relation,
-								 const std::string &variable_name, const std::string &eta)
-		: LocalDynamics(inner_relation.sph_body_), DissipationDataInner(inner_relation),
-		  rho_(particles_->rho_), source_(0.0),
-		  variable_(*particles_->getVariableByName<Real>(variable_name)),
-		  eta_(*particles_->template getVariableByName<Real>(eta)),
-		  normal_vector_(*particles_->template getVariableByName<Vecd>(normal_vector))
-	{
-		particles_->registerVariable(change_rate_, "DiffusionCoefficientChangeRate");
-		particles_->registerVariable(eta_ref_, reference_coefficient, [&](size_t i)
-									 { return eta_[i]; });
-		particles_->registerVariable(total_increment_, "TotalIncrement");
-		particles_->registerVariable(updated_increment_, "UpdatedIncrement");
-		particles_->registerVariable(previous_increment_, "PreviousIncrement");
-	};
-	virtual ~CoefficientEvolutionExplicit(){};
-
-	void initialization(size_t index_i, Real dt)
-	{
-		updated_increment_[index_i] = eta_[index_i] - eta_ref_[index_i];
-		total_increment_[index_i] = updated_increment_[index_i] + previous_increment_[index_i];
-	};
-
-	void interaction(size_t index_i, Real dt)
-	{
-		Real variable_i = variable_[index_i];
-		Real eta_i = eta_[index_i];
-
-		Real change_rate = source_;
-		const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
-		for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
-		{
-			Real b_ij = 2.0 * inner_neighborhood.dW_ijV_j_[n] / inner_neighborhood.r_ij_[n];
-			size_t index_j = inner_neighborhood.j_[n];
-
-			Real variable_diff = (variable_i - variable_[index_j]);
-			Real variable_diff_abs = ABS(variable_diff);
-			Real coefficient_ave = 0.5 * (total_increment_[index_i] + total_increment_[index_j]);
-			Real coefficient_diff = 0.5 * (eta_i - eta_[index_j]);
-
-			change_rate += b_ij * (coefficient_ave * variable_diff + coefficient_diff * variable_diff_abs);
-		}
-		change_rate_[index_i] = change_rate / rho_[index_i];
-	};
-
-	void update(size_t index_i, Real dt)
-	{
-		Real increment = change_rate_[index_i] * dt;
-		Real theta = increment < 0.0 ? SMIN((0.01 + Eps - eta_[index_i]) / increment, 1.0) : 1.0;
-		eta_[index_i] += increment * theta;
-	};
-
-	void setSource(Real source) { source_ = source; };
-
-protected:
-	StdLargeVec<Real> &rho_;
-	StdLargeVec<Real> change_rate_;
-	StdLargeVec<Real> &variable_;
-	StdLargeVec<Vecd> &normal_vector_;
-	StdLargeVec<Real> &eta_, eta_ref_; /**< variable damping coefficient */
-	StdLargeVec<Real> total_increment_, updated_increment_, previous_increment_;
-	Real source_;
-};
-//----------------------------------------------------------------------
-//	Evolution of the coefficient to achieve imposed target from the wall
-//----------------------------------------------------------------------
-class CoefficientEvolutionWithWallExplicit : public CoefficientEvolutionExplicit,
-	                                         public DissipationDataWithWall
-{
-public:
-	CoefficientEvolutionWithWallExplicit(ComplexRelation& complex_relation,
-		const std::string& variable_name, const std::string& eta)
-		: CoefficientEvolutionExplicit(complex_relation.getInnerRelation(),
-			variable_name, coefficient_name),
-		DissipationDataWithWall(complex_relation.getContactRelation())
-	{
-		for (size_t k = 0; k != contact_particles_.size(); ++k)
-		{
-			wall_variable_.push_back(contact_particles_[k]->template getVariableByName<Real>(variable_name));
-		}
-	};
-	virtual ~CoefficientEvolutionWithWallExplicit() {};
-
-	void interaction(size_t index_i, Real dt)
-	{
-		CoefficientEvolutionExplicit::interaction(index_i, dt);
-
-		Real change_rate = 0.0;
-		for (size_t k = 0; k < contact_configuration_.size(); ++k)
-		{
-			const StdLargeVec<Real>& variable_k = *(wall_variable_[k]);
-			const Neighborhood& contact_neighborhood = (*contact_configuration_[k])[index_i];
-			for (size_t n = 0; n != contact_neighborhood.current_size_; ++n)
-			{
-				Real b_ij = 2.0 * contact_neighborhood.dW_ijV_j_[n] / contact_neighborhood.r_ij_[n];
-				size_t index_j = contact_neighborhood.j_[n];
-
-				if (variable_k[index_j] != 0)
-				{
-					Real variable_diff = (variable_[index_i] - variable_k[index_j]);
-					change_rate += b_ij * total_increment_[index_i] * variable_diff;
-				}
-			}
-		}
-		change_rate_[index_i] += change_rate / rho_[index_i];
-	};
-
-protected:
-	StdVec<StdLargeVec<Real>*> wall_variable_;
-};
-//---------------------------------------------------------------------------
-//	Evolution of the coefficient to achieve imposed target from the flux wall
-//---------------------------------------------------------------------------
-class CoefficientEvolutionWithFluxWallExplicit : public CoefficientEvolutionWithWallExplicit
-{
-public:
-	CoefficientEvolutionWithFluxWallExplicit(ComplexRelation& complex_relation,
-		                                     const std::string& variable_name, const std::string& eta,
-		                                     const std::string& flux_name, const std::string normal_vector)
-		: CoefficientEvolutionWithWallExplicit(complex_relation, variable_name, eta)
-	{
-		for (size_t k = 0; k != contact_particles_.size(); ++k)
-		{
-			wall_flux_.push_back(contact_particles_[k]->template getVariableByName<Real>(flux_name));
-			wall_normal_vector_.push_back(contact_particles_[k]->template getVariableByName<Vecd>(normal_vector));
-		}
-	};
-	virtual ~CoefficientEvolutionWithFluxWallExplicit(){};
-
-	void interaction(size_t index_i, Real dt)
-	{
-		CoefficientEvolutionWithWallExplicit::interaction(index_i, dt);
-
-		Real change_rate = 0.0;
-		for (size_t k = 0; k < contact_configuration_.size(); ++k)
-		{
-			const StdLargeVec<Real>& heat_flux_k = *(wall_flux_[k]);
-			const StdLargeVec<Vecd>& normal_vector_k = *(wall_normal_vector_[k]);
-			const Neighborhood& contact_neighborhood = (*contact_configuration_[k])[index_i];
-			for (size_t n = 0; n != contact_neighborhood.current_size_; ++n)
-			{
-				Real b_ij = 2.0 * contact_neighborhood.dW_ijV_j_[n] / contact_neighborhood.r_ij_[n];
-				size_t index_j = contact_neighborhood.j_[n];
-
-				Real variable_diff_flux = -heat_flux_k[index_j] * contact_neighborhood.r_ij_[n] / eta_[index_i] /
-					normal_vector_k[index_j].dot(contact_neighborhood.e_ij_[n]);
-				change_rate += b_ij * total_increment_[index_i] * variable_diff_flux;
-			}
-		}
-		change_rate_[index_i] += change_rate / rho_[index_i];
-	};
-
 protected:
 	StdVec<StdLargeVec<Real>*> wall_flux_;
 	StdVec<StdLargeVec<Vecd>*> wall_normal_vector_;
@@ -474,7 +316,7 @@ int main()
 	boundaries.defineParticlesAndMaterial<SolidParticles, Solid>();
 	boundaries.generateParticles<ParticleGeneratorLattice>();
 
-	BodyRegionByParticle flux_boundary(diffusion_body, makeShared<MultiPolygonShape>(createFluxBoundaryDomain(), "FluxBoundary"));	
+	BodyRegionByParticle flux_inner_region(diffusion_body, makeShared<MultiPolygonShape>(createFluxBoundaryInnerRegion(), "FluxInnerRegion"));
 	//----------------------------------------------------------------------
 	//	add extra discrete variables (not defined in the library)
 	//----------------------------------------------------------------------
@@ -504,16 +346,15 @@ int main()
 
 	SimpleDynamics<DiffusivityDistribution> coefficient_distribution(diffusion_body);
 	SimpleDynamics<ConstraintTotalScalarAmount> constrain_total_coefficient(diffusion_body, coefficient_name);
-	SimpleDynamics<ImposingTargetSource, BodyPartByParticle> target_source(flux_boundary, coefficient_name, target_strength);
 
-	InteractionDynamics<UpdateUnitNormalVector> update_domain_vector(diffusion_body_complex, normal_vector);
-	InteractionDynamics<UpdateUnitNormalVector> update_boundary_vector(wall_boundary_complex, normal_vector);
+	InteractionDynamics<UpdateNormalVector> update_domain_vector(diffusion_body_complex, normal_vector);
+	InteractionDynamics<UpdateNormalVector> update_boundary_vector(wall_boundary_complex, normal_vector);
 
 	InteractionDynamics<ThermalEquationResidue>
 		thermal_equation_residue(diffusion_body_complex, variable_name, residue_name, coefficient_name, heat_source);
 	ReduceDynamics<MaximumNorm<Real>> maximum_equation_residue(diffusion_body, residue_name);
 	ReduceDynamics<QuantityMoment<Real>> total_coefficient(diffusion_body, coefficient_name);
-	ReduceAverage<QuantitySummation<Real>, BodyPartByParticle> average_temperature(flux_boundary, variable_name);
+	ReduceAverage<QuantitySummation<Real>, BodyPartByParticle> average_temperature(flux_inner_region, variable_name);
 	//----------------------------------------------------------------------
 	//	Define the methods for I/O operations and observations of the simulation.
 	//----------------------------------------------------------------------
@@ -522,14 +363,8 @@ int main()
 	//----------------------------------------------------------------------
 	//	Thermal diffusivity optimization
 	//----------------------------------------------------------------------
-	InteractionSplit<DampingSplittingWithWallFluxCoefficientByParticle<Real>>
-		implicit_heat_transfer_solver(diffusion_body_complex, variable_name, flux_name, 
-			                          normal_vector, coefficient_name);
-	Dynamics1Level<CoefficientEvolutionWithFluxWallExplicit>
-		coefficient_evolution_with_wall(diffusion_body_complex, variable_name, 
-			                            coefficient_name, flux_name, normal_vector);
-	SimpleDynamics<DiffusivityReferenceAndIncrement>
-		update_reference_and_increment(diffusion_body, reference_coefficient);
+	InteractionSplit<ThermalSolverWithFluxBoundary>
+		implicit_thermal_solver(diffusion_body_complex, variable_name, coefficient_name);
 	//----------------------------------------------------------------------
 	//	Prepare the simulation with cell linked list, configuration
 	//	and case specified initial condition if necessary.
@@ -569,34 +404,12 @@ int main()
 		while (relaxation_time < Observe_time)
 		{
 			// equation solving step
-			implicit_heat_transfer_solver.parallel_exec(dt);
+			implicit_thermal_solver.parallel_exec(dt);
 			relaxation_time += dt;
 			GlobalStaticVariables::physical_time_ += dt;
 
-			if (imposing_target)
-			{
-				// target imposing step
-				update_reference_and_increment.parallel_exec();
-				target_source.parallel_exec(dt_coeff);
-				for (size_t k = 0; k != target_steps; ++k)
-				{
-					coefficient_evolution_with_wall.parallel_exec(dt_coeff);
-					constrain_total_coefficient.parallel_exec();
-				}
-			}
-
-			// residue evaluation step
 			thermal_equation_residue.parallel_exec();
-			Real residue_max_after_target = maximum_equation_residue.parallel_exec();
-			if (residue_max_after_target > equation_residue_max && residue_max_after_target > allowed_equation_residue)
-			{
-				imposing_target = false; // imposing target skipped for next iteration
-			}
-			else
-			{
-				imposing_target = true;
-				equation_residue_max = residue_max_after_target;
-			}
+			equation_residue_max = maximum_equation_residue.parallel_exec();
 
 			ite++;
 			if (ite % 100 == 0)
