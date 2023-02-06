@@ -22,8 +22,7 @@
  * ------------------------------------------------------------------------*/
 /**
  * @file 	particle_dynamics_dissipation.h
- * @brief 	Here are the classes for damping the magnitude of
- * 			any variables.
+ * @brief 	Here are the classes for damping the magnitude of any discrete variable.
  * 			Note that, currently, these classes works only in single resolution.
  * @author	Bo Zhang, Chi ZHang and Xiangyu Hu
  */
@@ -32,6 +31,7 @@
 #define PARTICLE_DYNAMICS_DISSIPATION_H
 
 #include "all_particle_dynamics.h"
+#include "general_operators.h"
 #include "solid_particles.h"
 
 namespace SPH
@@ -42,72 +42,69 @@ namespace SPH
 	typedef DataDelegateContact<BaseParticles, SolidParticles, DataDelegateEmptyBase>
 		DissipationDataWithWall;
 
-	template <typename VariableType>
+	template <typename DataType>
 	struct ErrorAndParameters
 	{
-		VariableType error_;
+		DataType error_;
 		Real a_, c_;
-		ErrorAndParameters() : error_(ZeroData<VariableType>::value), a_(0), c_(0){};
+		ErrorAndParameters() : error_(ZeroData<DataType>::value), a_(0), c_(0){};
 	};
 
 	/**
-	 * @class DampingBySplittingAlgorithm
+	 * @class BaseDampingSplittingInner
 	 * @brief A quantity damping by splitting scheme
 	 * this method modifies the quantity directly.
 	 * Note that, if periodic boundary condition is applied,
 	 * the parallelized version of the method requires the one using ghost particles
 	 * because the splitting partition only works in this case.
 	 */
-	template <typename VariableType>
-	class DampingBySplittingInner : public LocalDynamics, public DissipationDataInner
+	template <typename DataType, class CoefficientType>
+	class BaseDampingSplittingInner : public OperatorInner<DataType, DataType, CoefficientType>
 	{
-	protected:
 	public:
-		DampingBySplittingInner(BaseInnerRelation &inner_relation, const std::string &variable_name, Real eta);
-		virtual ~DampingBySplittingInner(){};
+		template <typename CoefficientArg>
+		BaseDampingSplittingInner(BaseInnerRelation &inner_relation,
+								  const std::string &variable_name, const CoefficientArg &eta);
+		virtual ~BaseDampingSplittingInner(){};
 		void interaction(size_t index_i, Real dt = 0.0);
 
 	protected:
-		Real eta_; /**< damping coefficient */
 		StdLargeVec<Real> &Vol_, &mass_;
-		StdLargeVec<VariableType> &variable_;
+		StdLargeVec<DataType> &variable_;
 
-		virtual ErrorAndParameters<VariableType> computeErrorAndParameters(size_t index_i, Real dt = 0.0);
-		virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters<VariableType> &error_and_parameters);
+		virtual ErrorAndParameters<DataType> computeErrorAndParameters(size_t index_i, Real dt);
+		virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters<DataType> &error_and_parameters);
 	};
 
-	template <typename VariableType>
-	class DampingBySplittingComplex : public DampingBySplittingInner<VariableType>, public DissipationDataContact
+	template <typename DataType>
+	using DampingSplittingInner = BaseDampingSplittingInner<DataType, ConstantCoefficient<Real>>;
+	template <typename DataType>
+	using DampingSplittingInnerCoefficientByParticle = BaseDampingSplittingInner<DataType, CoefficientByParticle<Real>>;
+
+	/**
+	 * @class BaseDampingSplittingWithWall
+	 * @brief Note that the values on the wall are constrained. 
+	 */
+	template <typename DataType, class CoefficientType>
+	class BaseDampingSplittingWithWall : public BaseDampingSplittingInner<DataType, CoefficientType>, public DissipationDataWithWall
 	{
 	public:
-		DampingBySplittingComplex(ComplexRelation &complex_relation, const std::string &variable_name, Real eta);
-		virtual ~DampingBySplittingComplex(){};
+		template <typename CoefficientArg>
+		BaseDampingSplittingWithWall(ComplexRelation &complex_wall_relation,
+									 const std::string &variable_name, const CoefficientArg &eta);
+		virtual ~BaseDampingSplittingWithWall(){};
 
 	protected:
-		virtual ErrorAndParameters<VariableType> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override;
-		virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters<VariableType> &error_and_parameters) override;
+		virtual ErrorAndParameters<DataType> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override;
 
 	private:
-		StdVec<StdLargeVec<Real> *> contact_Vol_, contact_mass_;
-		StdVec<StdLargeVec<VariableType> *> contact_variable_;
+		StdVec<StdLargeVec<DataType> *> wall_variable_;
 	};
 
-	template <typename VariableType,
-			  template <typename BaseVariableType>
-			  class BaseDampingBySplittingType>
-	class DampingBySplittingWithWall : public BaseDampingBySplittingType<VariableType>, public DissipationDataWithWall
-	{
-	public:
-		DampingBySplittingWithWall(ComplexRelation &complex_wall_relation, const std::string &variable_name, Real eta);
-		virtual ~DampingBySplittingWithWall(){};
-
-	protected:
-		virtual ErrorAndParameters<VariableType> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override;
-
-	private:
-		StdVec<StdLargeVec<Real> *> wall_Vol_;
-		StdVec<StdLargeVec<VariableType> *> wall_variable_;
-	};
+	template <typename DataType>
+	using DampingSplittingWithWall = BaseDampingSplittingWithWall<DataType, ConstantCoefficient<Real>>;
+	template <typename DataType>
+	using DampingSplittingWithWallCoefficientByParticle = BaseDampingSplittingWithWall<DataType, CoefficientByParticle<Real>>;
 
 	/**
 	 * @class BaseDampingPairwiseInner
@@ -117,116 +114,46 @@ namespace SPH
 	 * the parallelized version of the method requires the one using ghost particles
 	 * because the splitting partition only works in this case.
 	 */
-	template <typename VariableType>
-	class BaseDampingPairwiseInner : public LocalDynamics, public DissipationDataInner
+	template <typename DataType, class CoefficientType>
+	class BaseDampingPairwiseInner : public OperatorInner<DataType, DataType, CoefficientType>
 	{
 	public:
-		BaseDampingPairwiseInner(BaseInnerRelation &inner_relation, const std::string &variable_name);
+		template <typename CoefficientArg>
+		BaseDampingPairwiseInner(BaseInnerRelation &inner_relation,
+								 const std::string &variable_name, const CoefficientArg &eta);
 		virtual ~BaseDampingPairwiseInner(){};
 
-	protected:
-		StdLargeVec<Real> &Vol_, &mass_;
-		StdLargeVec<VariableType> &variable_;
-
-		template <typename InterParticleCoefficient>
-		void dampPairwiseInner(size_t index_i, Real dt, const InterParticleCoefficient &coefficient);
-	};
-
-	/**
-	 * @class DampingPairwiseInner
-	 * @brief Damping with constant coefficient.
-	 */
-	template <typename VariableType>
-	class DampingPairwiseInner : public BaseDampingPairwiseInner<VariableType>
-	{
-	public:
-		DampingPairwiseInner(BaseInnerRelation &inner_relation, const std::string &variable_name, Real eta);
-		virtual ~DampingPairwiseInner(){};
 		void interaction(size_t index_i, Real dt = 0.0);
 
 	protected:
-		Real eta_; /**< damping coefficient */
-	};
-
-	/**
-	 * @class DampingPairwiseInnerVariableCoefficient
-	 * @brief Damping with constant coefficient.
-	 */
-	template <typename VariableType>
-	class DampingPairwiseInnerVariableCoefficient : public BaseDampingPairwiseInner<VariableType>
-	{
-	public:
-		DampingPairwiseInnerVariableCoefficient(
-			BaseInnerRelation &inner_relation,
-			const std::string &variable_name, const std::string &coefficient_name);
-		virtual ~DampingPairwiseInnerVariableCoefficient(){};
-		void interaction(size_t index_i, Real dt = 0.0);
-
-	protected:
-		StdLargeVec<Real> &eta_; /**< variable damping coefficient */
-	};
-
-	/**
-	 * @class DampingCoefficientEvolution
-	 * @brief Only works for scalar variable and coefficient. 
-	 * TODO: to be generalized for different data type
-	 */
-	class DampingCoefficientEvolution : public LocalDynamics, public DissipationDataInner
-	{
-	public:
-		DampingCoefficientEvolution(BaseInnerRelation &inner_relation, 
-		const std::string &variable_name, const std::string &coefficient_name);
-		virtual ~DampingCoefficientEvolution(){};
-		void interaction(size_t index_i, Real dt);
-		  
-	protected:
 		StdLargeVec<Real> &Vol_, &mass_;
-		StdLargeVec<Real> &variable_;
-		StdLargeVec<Real> &eta_; /**< variable damping coefficient */
+		StdLargeVec<DataType> &variable_;
 	};
 
-	/**
-	 * @class BaseDampingPairwiseComplex
-	 * @brief Damping between contact bodies with constant coefficient.
-	 * TODO: not tested yet.
-	 */
-	template <typename VariableType>
-	class BaseDampingPairwiseComplex : public BaseDampingPairwiseInner<VariableType>, public DissipationDataContact
-	{
-	public:
-		BaseDampingPairwiseComplex(BaseInnerRelation &inner_relation,
-								   BaseContactRelation &contact_relation, const std::string &variable_name);
-		BaseDampingPairwiseComplex(ComplexRelation &complex_relation, const std::string &variable_name);
-		virtual ~BaseDampingPairwiseComplex(){};
-
-	private:
-		StdVec<StdLargeVec<Real> *> contact_mass_;
-		StdVec<StdLargeVec<VariableType> *> contact_variable_;
-
-		template <typename InterParticleCoefficient>
-		void dampPairwiseContact(size_t index_i, Real dt, const InterParticleCoefficient &coefficient);
-	};
+	template <typename DataType>
+	using DampingPairwiseInner = BaseDampingPairwiseInner<DataType, ConstantCoefficient<Real>>;
+	template <typename DataType>
+	using DampingPairwiseInnerCoefficientByParticle = BaseDampingPairwiseInner<DataType, CoefficientByParticle<Real>>;
 
 	/**
 	 * @class BaseDampingPairwiseFromWall
 	 * @brief Damping to wall by which the wall velocity is not updated
 	 * and the mass of wall particle is not considered.
 	 */
-	template <typename VariableType>
-	class BaseDampingPairwiseFromWall : public LocalDynamics,
-										public DataDelegateContact<BaseParticles, SolidParticles>
+	template <typename DataType, class CoefficientType>
+	class BaseDampingPairwiseFromWall : public OperatorFromBoundary<DataType, DataType, CoefficientType>
 	{
 	public:
-		BaseDampingPairwiseFromWall(BaseContactRelation &contact_relation, const std::string &variable_name);
+		template <typename CoefficientArg>
+		BaseDampingPairwiseFromWall(BaseContactRelation &contact_relation,
+									const std::string &variable_name, const CoefficientArg &eta);
 		virtual ~BaseDampingPairwiseFromWall(){};
+		void interaction(size_t index_i, Real dt);
 
 	protected:
 		StdLargeVec<Real> &Vol_, &mass_;
-		StdLargeVec<VariableType> &variable_;
-		StdVec<StdLargeVec<VariableType> *> wall_variable_;
-
-		template <typename InterParticleCoefficient>
-		void dampPairwiseFromWall(size_t index_i, Real dt, const InterParticleCoefficient &coefficient);
+		StdLargeVec<DataType> &variable_;
+		StdVec<StdLargeVec<DataType> *> &wall_variable_;
 	};
 
 	/**
@@ -234,66 +161,38 @@ namespace SPH
 	 * @brief Damping to wall by which the wall velocity is not updated
 	 * and the mass of wall particle is not considered.
 	 */
-	template <typename VariableType>
-	class DampingPairwiseFromWall : public BaseDampingPairwiseFromWall<VariableType>
-	{
-	public:
-		DampingPairwiseFromWall(BaseContactRelation &contact_relation, const std::string &variable_name, Real eta);
-		virtual ~DampingPairwiseFromWall(){};
-		void interaction(size_t index_i, Real dt = 0.0);
-
-	protected:
-		Real eta_; /**< damping coefficient */
-	};
+	template <typename DataType>
+	using DampingPairwiseFromWall = BaseDampingPairwiseFromWall<DataType, ConstantCoefficient<Real>>;
+	template <typename DataType>
+	using DampingPairwiseFromWallCoefficientByParticle = BaseDampingPairwiseFromWall<DataType, CoefficientByParticle<Real>>;
 
 	/**
-	 * @class DampingPairwiseFromWall
-	 * @brief Damping to wall by which the wall velocity is not updated
-	 * and the mass of wall particle is not considered.
+	 * @class DampingPairwiseWithWall
+	 * @brief Damping with wall with the priority for update operator to wall first.
 	 */
-	template <typename VariableType>
-	class DampingPairwiseFromWallVariableCoefficient : public BaseDampingPairwiseFromWall<VariableType>
+	template <class BaseDampingType, class DampingFromWallType>
+	class DampingPairwiseWithWall : public BaseDampingType
 	{
 	public:
-		DampingPairwiseFromWallVariableCoefficient(
-			BaseContactRelation &contact_relation,
-			const std::string &variable_name, const std::string &coefficient_name);
-		virtual ~DampingPairwiseFromWallVariableCoefficient(){};
-		void interaction(size_t index_i, Real dt = 0.0);
-
-	protected:
-		StdLargeVec<Real> &eta_; /**< variable damping coefficient */
-	};
-
-	/**
-	 * @class DampingComplex
-	 * @brief Damping with wall by which the wall velocity is not updated
-	 * and the mass of wall particle is not considered.
-	 */
-	template <class BaseDampingInnerType, class BaseDampingContactType>
-	class DampingComplex : public LocalDynamics
-	{
-		BaseDampingInnerType inner_interaction_;
-		BaseDampingContactType contact_interaction_;
-
-	public:
+		template <class BodyRelationType, typename... Args>
+		DampingPairwiseWithWall(BodyRelationType &body_relation,
+						BaseContactRelation &relation_to_boundary, Args &&...args)
+			: BaseDampingType(body_relation, std::forward<Args>(args)...),
+			  damping_from_wall_(relation_to_boundary, std::forward<Args>(args)...){};
 		template <typename... Args>
-		DampingComplex(BaseInnerRelation &inner_relation,
-					   BaseContactRelation &contact_relation, Args &&...args)
-			: LocalDynamics(inner_relation.sph_body_),
-			  inner_interaction_(inner_relation, std::forward<Args>(args)...),
-			  contact_interaction_(contact_relation, std::forward<Args>(args)...){};
-		template <typename... Args>
-		DampingComplex(ComplexRelation &complex_wall_relation, Args &&...args)
-			: DampingComplex(complex_wall_relation.getInnerRelation(),
-							 complex_wall_relation.getContactRelation(),
-							 std::forward<Args>(args)...){};
-		virtual ~DampingComplex(){};
-		void interaction(size_t index_i, Real dt = 0.0)
+		DampingPairwiseWithWall(ComplexRelation &complex_relation, Args &&...args)
+			: DampingPairwiseWithWall(complex_relation.getInnerRelation(),
+							  complex_relation.getContactRelation(), std::forward<Args>(args)...){};
+		virtual ~DampingPairwiseWithWall(){};
+
+		void interaction(size_t index_i, Real dt)
 		{
-			contact_interaction_.interaction(index_i, dt);
-			inner_interaction_.interaction(index_i, dt);
+			damping_from_wall_.interaction(index_i, dt);
+			BaseDampingType::interaction(index_i, dt);
 		};
+
+	protected:
+		DampingFromWallType damping_from_wall_;
 	};
 
 	/**
@@ -302,6 +201,7 @@ namespace SPH
 	 * Note that, if periodic boundary condition is applied,
 	 * the parallelized version of the method requires the one using ghost particles
 	 * because the splitting partition only works in this case.
+	 * Note that this is only works with const coefficient.
 	 */
 	template <class DampingAlgorithmType>
 	class DampingWithRandomChoice : public DampingAlgorithmType
