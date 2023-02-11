@@ -51,18 +51,6 @@ std::vector<Vecd> createBoundaryDomain()
 
 	return boundaryDomain;
 };
-
-std::vector<Vecd> high_temperature_region
-{
-	Vecd(0.45 * L, H), Vecd(0.45 * L, H + BW), Vecd(0.55 * L, H + BW),
-	Vecd(0.55 * L, H), Vecd(0.45 * L, H)
-};
-
-std::vector<Vecd> low_temperature_region
-{
-	Vecd(0.45 * L, 0.0), Vecd(0.55 * L, 0.0), Vecd(0.55 * L, -BW),
-	Vecd(0.45 * L, -BW), Vecd(0.45 * L, 0.0)
-};
 //----------------------------------------------------------------------
 //	Define SPH bodies. 
 //----------------------------------------------------------------------
@@ -84,14 +72,6 @@ public:
 		multi_polygon_.addAPolygon(createThermalDomain(), ShapeBooleanOps::sub);
 	}
 };
-
-MultiPolygon createBoundaryConditionRegion()
-{
-	MultiPolygon multi_polygon;
-	multi_polygon.addAPolygon(high_temperature_region, ShapeBooleanOps::add);
-	multi_polygon.addAPolygon(low_temperature_region, ShapeBooleanOps::add);
-	return multi_polygon;
-}
 //----------------------------------------------------------------------
 //	Setup diffusion material properties. 
 //----------------------------------------------------------------------
@@ -227,8 +207,6 @@ int main()
 	SolidBody wall_boundary(sph_system, makeShared<WallBoundary>("WallBoundary"));
 	wall_boundary.defineParticlesAndMaterial<DiffusionReactionParticles<SolidParticles, Solid>, DiffusionBodyMaterial>();
 	wall_boundary.generateParticles<ParticleGeneratorLattice>();
-
-	BodyRegionByParticle BC_region(wall_boundary, makeShared<MultiPolygonShape>(createBoundaryConditionRegion(), "BC_region"));
 	//----------------------------------------------------------------------
 	//	Define body relation map.
 	//	The contact map gives the topological connections between the bodies.
@@ -486,7 +464,7 @@ int main()
 		averaged_residual_T_current_local << "   " << averaged_residual_T_current_global << "   " << averaged_residual_k_current_local << "   " <<
 		averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
 
-	while ((relative_difference > 0.00001 || averaged_residual_T_current_global > 0.000005 || learning_rate_alpha > 0.00001) && ite_loop < 10)
+	while ((relative_difference > 0.00001 || averaged_residual_T_current_global > 0.000005 || learning_rate_alpha > 0.00001) && ite_loop < 1000)
 	{
 		std::cout << "This is the beginning of the " << ite_loop << " iteration loop." << std::endl;
 

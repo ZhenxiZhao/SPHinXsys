@@ -53,6 +53,7 @@ namespace SPH
 		virtual Vecd probeLevelSetGradient(const Vecd &position) = 0;
 		virtual Real probeKernelIntegral(const Vecd &position, Real h_ratio = 1.0) = 0;
 		virtual Vecd probeKernelGradientIntegral(const Vecd &position, Real h_ratio = 1.0) = 0;
+		virtual Vecd probeKernelSecondGradientIntegral(const Vecd& position, Real h_ratio = 1.0) = 0;
 
 	protected:
 		Shape &shape_; /**< the geometry is described by the level set. */
@@ -98,10 +99,12 @@ namespace SPH
 		virtual Vecd probeLevelSetGradient(const Vecd &position) override;
 		virtual Real probeKernelIntegral(const Vecd &position, Real h_ratio = 1.0) override;
 		virtual Vecd probeKernelGradientIntegral(const Vecd &position, Real h_ratio = 1.0) override;
+		virtual Vecd probeKernelSecondGradientIntegral(const Vecd &position, Real h_ratio = 1.0) override;
 		virtual void writeMeshFieldToPlt(std::ofstream &output_file) override;
 		bool isWithinCorePackage(Vecd position);
 		Real computeKernelIntegral(const Vecd &position);
 		Vecd computeKernelGradientIntegral(const Vecd &position);
+		Vecd computeKernelSecondGradientIntegral(const Vecd &position);
 
 	protected:
 		DiscreteVariable<Real> phi_;
@@ -109,6 +112,7 @@ namespace SPH
 		DiscreteVariable<Vecd> phi_gradient_;
 		DiscreteVariable<Real> kernel_weight_;
 		DiscreteVariable<Vecd> kernel_gradient_;
+		DiscreteVariable<Vecd> kernel_second_gradient_;
 		Kernel &kernel_;
 
 		void initializeDataForSingularPackage(LevelSetDataPackage *data_pkg, Real far_field_level_set);
@@ -172,6 +176,7 @@ namespace SPH
 		virtual Vecd probeLevelSetGradient(const Vecd &position) override;
 		virtual Real probeKernelIntegral(const Vecd &position, Real h_ratio = 1.0) override;
 		virtual Vecd probeKernelGradientIntegral(const Vecd &position, Real h_ratio = 1.0) override;
+		virtual Vecd probeKernelSecondGradientIntegral(const Vecd& position, Real h_ratio = 1.0) override;
 
 	protected:
 		inline size_t getProbeLevel(const Vecd &position);

@@ -187,7 +187,7 @@ namespace SPH
 
 	/**
 	 * @class MaximumNorm
-	 * @brief  obtained the maximum norm of a variable
+	 * @brief obtained the maximum norm of a variable
 	 */
 	template <typename DataType>
 	class MaximumNorm : public LocalDynamicsReduce<Real, ReduceMax>,

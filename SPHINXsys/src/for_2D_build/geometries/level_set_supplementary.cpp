@@ -453,6 +453,34 @@ namespace SPH
 		return integral * data_spacing_ * data_spacing_;
 	}
 	//=============================================================================================//
+	Vecd LevelSet::computeKernelSecondGradientIntegral(const Vecd& position)
+	{
+		Real phi = probeSignedDistance(position);
+		Real cutoff_radius = kernel_.CutOffRadius(global_h_ratio_);
+		Real threshold = cutoff_radius + data_spacing_;
+
+		Vecd integral = Vecd::Zero();
+		if (fabs(phi) < threshold)
+		{
+			Vecu global_index_ = global_mesh_.CellIndexFromPosition(position);
+			for (int i = -3; i != 4; ++i)
+				for (int j = -3; j != 4; ++j)
+				{
+					Vecu neighbor_index = Vecu(global_index_[0] + i, global_index_[1] + j);
+					Real phi_neighbor = DataValueFromGlobalIndex(phi_, neighbor_index);
+					if (phi_neighbor > -data_spacing_)
+					{
+						Vecd displacement = position - global_mesh_.GridPositionFromIndex(neighbor_index);
+						Real distance = displacement.norm();
+						if (distance < cutoff_radius)
+							integral += kernel_.d2W(global_h_ratio_, distance, displacement) *
+							            computeHeaviside(phi_neighbor, data_spacing_) * displacement / (distance + TinyReal);
+					}
+				}
+		}
+		return integral * data_spacing_ * data_spacing_;
+	}
+	//=============================================================================================//
 	RefinedLevelSet::RefinedLevelSet(BoundingBox tentative_bounds, LevelSet &coarse_level_set,
 									 Shape &shape, SPHAdaptation &sph_adaptation)
 		: RefinedMesh(tentative_bounds, coarse_level_set, 4, shape, sph_adaptation)

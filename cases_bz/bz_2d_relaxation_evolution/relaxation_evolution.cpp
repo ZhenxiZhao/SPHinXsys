@@ -13,6 +13,7 @@ Real radius = 1;		/**< Radius of the cylinder. */
 Real resolution_ref = radius / 40.0;
 Real BW = resolution_ref * 2.0;
 BoundingBox system_domain_bounds(Vec2d(-BW - radius, -BW - radius), Vec2d(radius + BW, radius + BW));
+std::string residue_name = "residue";
 //----------------------------------------------------------------------
 //	Define geometries
 //----------------------------------------------------------------------
@@ -44,9 +45,10 @@ int main(int ac, char *av[])
 		? body.generateParticles<ParticleGeneratorReload>(io_environment, body.getName())
 		: body.generateParticles<ParticleGeneratorLattice>();
 
-	StdLargeVec<Real> splitting_tag;
-	body.addBodyState<Real>(splitting_tag, "Splitting_tag");
-	body.addBodyStateForRecording<Real>("Splitting_tag");
+	StdLargeVec<Real> residue_;
+	body.addBodyState<Real>(residue_, residue_name);
+	body.addBodyStateForRecording<Real>(residue_name);
+	body.addBodyStateToRestart<Real>(residue_name);
 	//----------------------------------------------------------------------
 	//	Define body relation map.
 	//	The contact map gives the topological connections between the bodies.
@@ -68,26 +70,29 @@ int main(int ac, char *av[])
 		/** Write the particle reload files. */
 		ReloadParticleIO write_particle_reload_files(io_environment, {&body});
 		/** A  Physics relaxation step. */
-		//relax_dynamics::RelaxationStepInner relaxation_step_inner(insert_body_inner);
-		relax_dynamics::RelaxationEvolutionInner relaxation_evolution_inner(insert_body_inner);
+		relax_dynamics::RelaxationEvolutionInner relaxation_inner(insert_body_inner, true);
+		/*InteractionDynamics<relax_dynamics::UpdateParticleKineticEnergy> 
+			update_kinetic_energy(insert_body_inner, residue_name);
+		ReduceAverage<QuantitySummation<Real>> average_residue(body, residue_name);*/
 		//----------------------------------------------------------------------
 		//	Particle relaxation starts here.
 		//----------------------------------------------------------------------
 		random_insert_body_particles.parallel_exec(0.25);
-		//relaxation_step_inner.SurfaceBounding().parallel_exec();
-		relaxation_evolution_inner.SurfaceBounding().parallel_exec();
+		relaxation_inner.SurfaceBounding().parallel_exec();
 		write_insert_body_to_vtp.writeToFile(0);
 		//----------------------------------------------------------------------
 		//	Relax particles of the insert body.
 		//----------------------------------------------------------------------
+		std::string filefullpath_residue = io_environment.output_folder_ + "/" + "residue.dat";
+		std::ofstream out_file_residue(filefullpath_residue.c_str(), std::ios::app);
+
 		int ite_p = 0;
-		Real dt = 1.0 / 5.0;
-		while (ite_p < 100)
+		Real dt = 1.0 / 200.0;
+		while (ite_p < 2000)
 		{
-			//relaxation_step_inner.parallel_exec();
-			relaxation_evolution_inner.exec(dt);
+			relaxation_inner.parallel_exec(dt);
 			ite_p += 1;
-			if (ite_p % 1 == 0)
+			if (ite_p % 200 == 0)
 			{
 				std::cout << std::fixed << std::setprecision(9) << "Relaxation steps for the inserted body N = " << ite_p << "\n";
 				write_insert_body_to_vtp.writeToFile(ite_p);

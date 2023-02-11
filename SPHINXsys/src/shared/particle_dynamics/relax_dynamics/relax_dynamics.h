@@ -251,56 +251,99 @@ namespace SPH
 
 		struct ErrorAndParameters
 		{
-			Real error_, c_;
-			Vecd a_;
-			ErrorAndParameters() : error_(0), a_(ZeroData<Vecd>::value), c_(0) {};
+			Vecd error_;
+			Matd a_;
+			Matd c_;
+
+			ErrorAndParameters() : error_(ZeroData<Vecd>::value), a_(ZeroData<Matd>::value), c_(ZeroData<Matd>::value) {};
 		};
 
-		///**
-		// * @class RelaxationPositionEvolutionInner
-		// * @brief carry out particle relaxation by position evolution.
-		// */
-		//class RelaxationPositionEvolutionInner
-		//	: public LocalDynamics,
-		//	  public RelaxDataDelegateInner
-		//{
-		//protected:
-		//public:
-		//	explicit RelaxationPositionEvolutionInner(BaseInnerRelation &inner_relation);
-		//	virtual ~RelaxationPositionEvolutionInner() {};
-		//	void interaction(size_t index_i, Real dt = 0.0);
+		/**
+		 * @class RelaxationImplicitInner
+		 * @brief carry out particle relaxation by position implicit evolution.
+		 */
+		class RelaxationImplicitInner : public LocalDynamics,
+			                            public RelaxDataDelegateInner
+		{
+		public:
+			explicit RelaxationImplicitInner(BaseInnerRelation& inner_relation);
+			virtual ~RelaxationImplicitInner() {};
+			void interaction(size_t index_i, Real dt = 0.0);
 
-		//protected:
-		//	Real W0;
-		//	StdLargeVec<Real> &Vol_, &mass_, &splitting_tag;
-		//	StdLargeVec<Vecd>& pos_;
+		protected:
+			virtual ErrorAndParameters computeErrorAndParameters(size_t index_i, Real dt = 0.0);
+			virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters& error_and_parameters);
 
-		//	virtual ErrorAndParameters computeErrorAndParameters(size_t index_i, Real dt = 0.0);
-		//	virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters& error_and_parameters);
-		//};
+			Kernel* kernel_;
+			StdLargeVec<Real>& Vol_;
+			StdLargeVec<Vecd>& pos_;
+		};
 
-		///**
-		// * @class RelaxationEvolutionInner
-		// * @brief carry out the particle relaxation evolution within the body
-		// */
-		//class RelaxationEvolutionInner : public BaseDynamics<void>
-		//{
-		//public:
-		//	explicit RelaxationEvolutionInner(BaseInnerRelation& inner_relation,
-		//		bool level_set_correction = false);
-		//	virtual ~RelaxationEvolutionInner() {};
-		//	SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface>& SurfaceBounding() { return surface_bounding_; };
-		//	virtual void exec(Real dt = 0.0) override;
-		//	virtual void parallel_exec(Real dt = 0.0) override;
+		/**
+		 * @class RelaxationImplicitInnerWithLevelSetCorrection
+		 * @brief we constrain particles to a level function representing the interface.
+		 */
+		class RelaxationImplicitInnerWithLevelSetCorrection : public RelaxationImplicitInner
+		{
+		public:
+			explicit RelaxationImplicitInnerWithLevelSetCorrection(BaseInnerRelation& inner_relation);
+			virtual ~RelaxationImplicitInnerWithLevelSetCorrection() {};
 
-		//protected:
-		//	RealBody* real_body_;
-		//	BaseInnerRelation& inner_relation_;
-		//	NearShapeSurface near_shape_surface_;
-		//	UniquePtr<BaseDynamics<void>> relaxation_evolution_inner_;
-		//	SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
-		//};
+		protected:
+			virtual ErrorAndParameters computeErrorAndParameters(size_t index_i, Real dt = 0.0) override;
 
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+		};
+
+		/**
+		 * @class RelaxationEvolutionInner
+		 * @brief carry out the particle relaxation evolution within the body
+		 */
+		class RelaxationEvolutionInner : public BaseDynamics<void>
+		{
+		public:
+			explicit RelaxationEvolutionInner(BaseInnerRelation& inner_relation, bool level_set_correction = false);
+			virtual ~RelaxationEvolutionInner() {};
+			SimpleDynamics<ShapeSurfaceBounding, BodyPartByCell>& SurfaceBounding() { return surface_bounding_; };
+			virtual void exec(Real dt = 0.0) override;
+			virtual void parallel_exec(Real dt = 0.0) override;
+
+		protected:
+			RealBody* real_body_;
+			BaseInnerRelation& inner_relation_;
+			NearShapeSurface near_shape_surface_;
+			UniquePtr<BaseDynamics<void>> relaxation_evolution_inner_;
+			SimpleDynamics<ShapeSurfaceBounding, BodyPartByCell> surface_bounding_;
+		};
+
+		/**
+		 *@class UpdateParticleKineticEnergy
+		 *@brief calculate the particle kinetic energy
+		 */
+		class UpdateParticleKineticEnergy : public LocalDynamics, public GeneralDataDelegateInner
+		{
+		public:
+			UpdateParticleKineticEnergy(BaseInnerRelation& inner_relation, const std::string& residue_name) :
+				LocalDynamics(inner_relation.sph_body_), GeneralDataDelegateInner(inner_relation),
+				residue_(*particles_->template getVariableByName<Real>(residue_name)) {}
+			virtual ~UpdateParticleKineticEnergy() {};
+			void interaction(size_t index_i, Real dt)
+			{
+				Vecd residue_local_(ZeroData<Vecd>::value);
+				Neighborhood& inner_neighborhood = inner_configuration_[index_i];
+				for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
+				{
+					size_t index_j = inner_neighborhood.j_[n];
+					residue_local_ += inner_neighborhood.dW_ijV_j_[n] * inner_neighborhood.e_ij_[n];
+				}
+				residue_[index_i] = residue_local_.norm();
+			}
+
+		protected:
+			StdLargeVec<Real> &residue_;
+		};
+		
 		/**
 		 * @class ShellMidSurfaceBounding
 		 * @brief constrain particles by constraining particles to mid-surface.
