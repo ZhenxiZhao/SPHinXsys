@@ -133,6 +133,9 @@ namespace SPH
 				&angular_vel_, &dangular_vel_dt_;
 			StdLargeVec<Matd> &B_, &F_, &dF_dt_, &F_bending_, &dF_bending_dt_;
 			StdLargeVec<Matd> &transformation_matrix_;
+
+			// for debug
+			StdLargeVec<Real>& det_F_, & det_dF_dt_, & det_dF_dt_part1_, & det_dF_bending_dt_part2_;
 		};
 
 		/**

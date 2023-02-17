@@ -101,7 +101,10 @@ namespace SPH
 			  dangular_vel_dt_(particles_->dangular_vel_dt_),
 			  B_(particles_->B_), F_(particles_->F_), dF_dt_(particles_->dF_dt_),
 			  F_bending_(particles_->F_bending_), dF_bending_dt_(particles_->dF_bending_dt_),
-			  transformation_matrix_(particles_->transformation_matrix_) {}
+			  transformation_matrix_(particles_->transformation_matrix_),
+			det_F_(particles_->det_F_), det_dF_dt_(particles_->det_dF_dt_), det_dF_dt_part1_(particles_->det_dF_dt_part1_),
+			det_dF_bending_dt_part2_(particles_->det_dF_bending_dt_part2_)
+		{}
 		//=================================================================================================//
 		ShellStressRelaxationFirstHalf::
 			ShellStressRelaxationFirstHalf(BaseInnerRelation &inner_relation,
@@ -298,12 +301,18 @@ namespace SPH
 			dF_dt_[index_i] = transformation_matrix_i * deformation_gradient_change_rate_part_one * transformation_matrix_i.transpose() * B_[index_i];
 			dF_dt_[index_i].col(Dimensions - 1) = transformation_matrix_i * dpseudo_n_dt_[index_i];
 			dF_bending_dt_[index_i] = transformation_matrix_i * deformation_gradient_change_rate_part_two * transformation_matrix_i.transpose() * B_[index_i];
+
+			det_dF_dt_part1_[index_i] = deformation_gradient_change_rate_part_one.determinant();
+			det_dF_bending_dt_part2_[index_i] = deformation_gradient_change_rate_part_two.determinant();
 		}
 		//=================================================================================================//
 		void ShellStressRelaxationSecondHalf::update(size_t index_i, Real dt)
 		{
 			F_[index_i] += dF_dt_[index_i] * dt * 0.5;
 			F_bending_[index_i] += dF_bending_dt_[index_i] * dt * 0.5;
+
+			det_F_[index_i] = F_[index_i].determinant();
+			det_dF_dt_[index_i] = dF_dt_[index_i].determinant();
 		}
 		//=================================================================================================//
 		ConstrainShellBodyRegion::

@@ -318,6 +318,12 @@ namespace SPH
 		addDerivedVariableToWrite<VonMisesStrain>();
 		addVariableToRestart<Matd>("DeformationGradient");
 		addVariableToWrite<Vecd>("Rotation");
+
+		registerVariable(det_F_, "det_F");
+		registerVariable(det_dF_dt_, "det_dFdt");
+		registerVariable(det_dF_dt_part1_, "det_dFdtPart1");
+		registerVariable(det_dF_bending_dt_part2_, "det_dFbendingdtPart2");
+
 		/** 
 		 * initialize transformation matrix
 		 */
