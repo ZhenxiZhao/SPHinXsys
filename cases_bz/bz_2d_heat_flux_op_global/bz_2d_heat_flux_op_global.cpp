@@ -1,18 +1,19 @@
 /**
- * @file 	diffusion_heat_source_optimization.cpp
- * @brief 	This is the first test to validate the numerical optimization method.
+ * @file 	diffusion_heat_flux_optimization.cpp
+ * @brief 	This is the second test to validate the optimization.
  * @author 	Bo Zhang and Xiangyu Hu
  */
-#include "sphinxsys.h"
+#include "sphinxsys.h" 
 using namespace SPH;
+
 //----------------------------------------------------------------------
 //	Basic geometry parameters and numerical setup.
 //----------------------------------------------------------------------
-Real L = 1.0;
+Real L = 1.0; 	
 Real H = 1.0;
 Real resolution_ref = H / 100.0;
 Real BW = resolution_ref * 4.0;
-BoundingBox system_domain_bounds(Vec2d(-BW, -BW), Vec2d(L + BW, H + BW));
+BoundingBox system_domain_bounds(Vec2d(-BW, -BW), Vec2d(L + BW, H + BW)); 
 //----------------------------------------------------------------------
 //	Basic parameters for material properties.
 //----------------------------------------------------------------------
@@ -25,9 +26,9 @@ std::array<std::string, 1> species_name_list{ "Phi" };
 //	Initial and boundary conditions.
 //----------------------------------------------------------------------
 Real initial_temperature = 0.0;
-Real high_temperature = 350.0;
-Real low_temperature = 300.0;
-Real heat_source = 100.0;
+Real left_temperature = 300.0;
+Real right_temperature = 350.0;
+Real heat_flux = 2000.0;
 //----------------------------------------------------------------------
 //	Geometric shapes used in the system.
 //----------------------------------------------------------------------
@@ -41,7 +42,7 @@ std::vector<Vecd> createThermalDomain()
 	thermalDomainShape.push_back(Vecd(0.0, 0.0));
 
 	return thermalDomainShape;
-};
+}
 
 std::vector<Vecd> createBoundaryDomain()
 {
@@ -53,7 +54,7 @@ std::vector<Vecd> createBoundaryDomain()
 	boundaryDomain.push_back(Vecd(-BW, -BW));
 
 	return boundaryDomain;
-};
+}
 //----------------------------------------------------------------------
 //	Define SPH bodies. 
 //----------------------------------------------------------------------
@@ -75,14 +76,14 @@ public:
 		multi_polygon_.addAPolygon(createThermalDomain(), ShapeBooleanOps::sub);
 	}
 };
+
 //----------------------------------------------------------------------
 //	Setup diffusion material properties. 
 //----------------------------------------------------------------------
-class DiffusionBodyMaterial : public DiffusionReaction<Solid>
+class DiffusionBodyMaterial :public DiffusionReaction<Solid>
 {
 public:
-	DiffusionBodyMaterial()
-		:DiffusionReaction<Solid>(species_name_list)
+	DiffusionBodyMaterial() :DiffusionReaction<Solid>(species_name_list)
 	{
 		initializeAnDiffusion<LocalDirectionalDiffusion>("Phi", "Phi", diffusion_coff, bias_diffusion_coff, bias_direction);
 	}
@@ -98,8 +99,9 @@ protected:
 	size_t phi_;
 	void update(size_t index_i, Real dt)
 	{
-		species_n_[phi_][index_i] = 400 + 50 * (double)rand() / RAND_MAX;
-		heat_source_[index_i] = heat_source;
+		/** setup the initial random temperature. */
+		species_n_[phi_][index_i] = 600 + 50 * (double)rand() / RAND_MAX;
+
 	};
 public:
 	DiffusionBodyInitialCondition(SolidBody &diffusion_body) :
@@ -115,11 +117,12 @@ class ThermalDiffusivityRandomInitialization
 protected:
 	void update(size_t index_i, Real dt)
 	{
+		/** setup the initial random thermal diffusivity. */
 		variable_[index_i] = 0.5 + (double)rand() / RAND_MAX;
 	};
 public:
 	ThermalDiffusivityRandomInitialization(SolidBody &diffusion_body, const std::string &variable_name) :
-	 	DiffusionMaterialPropertyInitialization<SolidParticles, Solid, Real>(diffusion_body, variable_name) {};
+		DiffusionMaterialPropertyInitialization<SolidParticles, Solid, Real>(diffusion_body, variable_name) {};
 };
 
 class WallBoundaryInitialCondition
@@ -130,13 +133,17 @@ protected:
 	void update(size_t index_i, Real dt)
 	{
 		species_n_[phi_][index_i] = -0.0;
+		if (pos_[index_i][1] > H && pos_[index_i][0] > 0.3*L && pos_[index_i][0] < 0.4*L)
+		{
+			species_n_[phi_][index_i] = left_temperature;
+		}
+		if (pos_[index_i][1] > H && pos_[index_i][0] > 0.6*L && pos_[index_i][0] < 0.7*L)
+		{
+			species_n_[phi_][index_i] = right_temperature;
+		}
 		if (pos_[index_i][1] < 0 && pos_[index_i][0] > 0.45*L && pos_[index_i][0] < 0.55*L)
 		{
-			species_n_[phi_][index_i] = low_temperature;
-		}
-		if (pos_[index_i][1] > 1 && pos_[index_i][0] > 0.45*L && pos_[index_i][0] < 0.55*L)
-		{
-			species_n_[phi_][index_i] = high_temperature;
+			heat_flux_[index_i] = heat_flux;
 		}
 	}
 public:
@@ -175,15 +182,16 @@ protected:
 	void update(size_t index_i, Real learning_rate)
 	{
 		species_recovery_[index_i] = species_n_[phi_][index_i];
-		species_modified_[index_i] = species_n_[phi_][index_i] - learning_rate * (high_temperature - low_temperature);
-	}                                     
+		species_modified_[index_i] = species_n_[phi_][index_i] - learning_rate * (right_temperature - left_temperature);
+	}
 public:
-	ImposeObjectiveFunction(SolidBody &diffusion_body) :
+	ImposeObjectiveFunction(SolidBody& diffusion_body) :
 		DiffusionBasedMapping<SolidParticles, Solid>(diffusion_body)
 	{
 		phi_ = particles_->diffusion_reaction_material_.SpeciesIndexMap()["Phi"];
 	}
 };
+
 //----------------------------------------------------------------------
 //	Main program starts here.
 //----------------------------------------------------------------------
@@ -212,7 +220,9 @@ int main()
 	//	Basically the range of bodies to build neighbor particle lists.
 	//----------------------------------------------------------------------
 	InnerRelation diffusion_body_inner(diffusion_body);
+	InnerRelation wall_boundary_inner(wall_boundary);
 	ComplexRelation diffusion_body_complex(diffusion_body, { &wall_boundary });
+	ComplexRelation wall_boundary_complex(wall_boundary, { &diffusion_body });
 	//----------------------------------------------------------------------
 	//	Define the main numerical methods used in the simulation.
 	//	Note that there may be data dependence on the constructors of these methods.
@@ -221,6 +231,10 @@ int main()
 	SimpleDynamics<WallBoundaryInitialCondition> setup_boundary_condition(wall_boundary);
 	SimpleDynamics<ThermalDiffusivityRandomInitialization> thermal_diffusivity_random_initialization(diffusion_body, "ThermalDiffusivity");
 	GetDiffusionTimeStepSize<SolidParticles, Solid> get_time_step_size(diffusion_body);
+	InteractionDynamics<UpdateUnitNormalVector<SolidParticles, Solid, SolidParticles, Solid>>
+		update_diffusion_body_normal_vector(diffusion_body_complex);
+	InteractionDynamics<UpdateUnitNormalVector<SolidParticles, Solid, SolidParticles, Solid>>
+		update_wall_boundary_normal_vector(wall_boundary_complex);
 	//----------------------------------------------------------------------
 	//	Define the methods for I/O operations and observations of the simulation.
 	//----------------------------------------------------------------------
@@ -278,9 +292,9 @@ int main()
 	Real initial_averaged_residual_T = 0.0;
 	Real initial_averaged_variation = 0.0;
 	Real opt_averaged_temperature = 0.0;
-	Real nonopt_averaged_temperature = 0.0;
+	Real nonopt_averaged_temperature = Infinity;
 	Real averaged_k_parameter = 0.0;
-	Real initial_eta_regularization = 2;
+	Real initial_eta_regularization = 1.5;
 	Real current_eta_regularization = 1;
 
 	/* Parameters related to objective observed. */
@@ -370,6 +384,8 @@ int main()
 	sph_system.initializeSystemConfigurations();
 	setup_diffusion_condition.exec();
 	setup_boundary_condition.exec();
+	update_diffusion_body_normal_vector.parallel_exec();
+	update_wall_boundary_normal_vector.parallel_exec();
 	thermal_diffusivity_random_initialization.exec();
 	
 	//----------------------------------------------------------------------
@@ -441,7 +457,7 @@ int main()
 	//ite++; write_states.writeToFile(ite);
 
 	/* Preliminary solve the PDE equation to avoid extreme values during splitting. */
-	//for (size_t i = 0; i != 10; ++i) { temperature_splitting_pde_complex.parallel_exec(dt); }
+	//for (size_t i = 0; i != 5000; ++i) { temperature_splitting_pde_complex.parallel_exec(dt); }
 	update_temperature_pde_residual.parallel_exec(dt);
 	averaged_residual_T_current_global = calculate_temperature_global_residual.parallel_exec(dt);
 	averaged_residual_T_last_global = averaged_residual_T_current_global;
@@ -464,8 +480,7 @@ int main()
 		averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
 	
 	/** the converged criterion contains 3 parts respect to target function, PDE constrain, and maximum step.*/
-	//while ((relative_difference > 0.00001 || averaged_residual_T_current_global > 0.000005 || learning_rate_alpha > 0.00001) && ite_loop < 6000)
-	while ((relative_difference > 0.00001 || averaged_residual_T_current_global > 0.000005) && ite_loop < 500)
+	while ((relative_difference > 0.00001 || averaged_residual_T_current_global > 0.000005) && ite_loop < 2000)
 	{
 		std::cout << "This is the beginning of the " << ite_loop << " iteration loop." << std::endl;
 
@@ -490,13 +505,13 @@ int main()
 		averaged_residual_k_current_global = calculate_thermal_diffusivity_global_residual.parallel_exec();
 		maximum_residual_k_current_global = calculate_maximum_error_change.parallel_exec(dt);
 
-		out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
+		/*out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
 			averaged_residual_T_current_global << "   " << maximum_residual_T_current_global << "   " <<
 			averaged_residual_k_current_global << "   " << maximum_residual_k_current_global << "   " <<
 			averaged_variation_current_global << "   " << maximum_variation_current_global << "\n";
 		out_file_all_information << std::fixed << std::setprecision(12) << ite_loop << "   " << ite << "   " <<
 			averaged_residual_T_current_local << "   " << averaged_residual_T_current_global << "   " << averaged_residual_k_current_local << "   " <<
-			averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
+			averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";*/
 
 		if (ite_loop % ite_output == 0) { write_states.writeToFile(ite); }
 		std::cout << "N=" << ite << " and the objective function has been imposed. " << "\n";
@@ -517,7 +532,7 @@ int main()
 
 			if (ite_k % 1 == 0 || ite_k == ite_k_total)
 			{
-				update_temperature_pde_residual.parallel_exec(dt);
+				/*update_temperature_pde_residual.parallel_exec(dt);
 				averaged_residual_T_current_global = calculate_temperature_global_residual.parallel_exec(dt);
 				maximum_residual_T_current_global = calculate_maximum_error.parallel_exec(dt);
 
@@ -529,15 +544,15 @@ int main()
 				update_regularization_global_variation.parallel_exec(dt);
 				averaged_variation_current_local = calculate_regularization_local_variation.parallel_exec(dt);
 				averaged_variation_current_global = calculate_regularization_global_variation.parallel_exec(dt);
-				maximum_variation_current_global = calculate_maximum_variation.parallel_exec(dt);
+				maximum_variation_current_global = calculate_maximum_variation.parallel_exec(dt);*/
 
-				out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
+				/*out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
 					averaged_residual_T_current_global << "   " << maximum_residual_T_current_global << "   " <<
 					averaged_residual_k_current_global << "   " << maximum_residual_k_current_global << "   " <<
 					averaged_variation_current_global << "   " << maximum_variation_current_global << "\n";
 				out_file_all_information << std::fixed << std::setprecision(12) << ite_loop << "   " << ite << "   " <<
 					averaged_residual_T_current_local << "   " << averaged_residual_T_current_global << "   " << averaged_residual_k_current_local << "   " <<
-					averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
+					averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";*/
 				
 				//write_states.writeToFile(ite);
 			}
@@ -553,7 +568,7 @@ int main()
 				thermal_diffusivity_constrain.UpdateAveragedParameter(averaged_k_parameter);
 				thermal_diffusivity_constrain.parallel_exec(dt);
 
-				update_temperature_pde_residual.parallel_exec(dt);
+				/*update_temperature_pde_residual.parallel_exec(dt);
 				averaged_residual_T_current_global = calculate_temperature_global_residual.parallel_exec(dt);
 				maximum_residual_T_current_global = calculate_maximum_error.parallel_exec(dt);
 
@@ -565,15 +580,15 @@ int main()
 				update_regularization_global_variation.parallel_exec(dt);
 				averaged_variation_current_local = calculate_regularization_local_variation.parallel_exec(dt);
 				averaged_variation_current_global = calculate_regularization_global_variation.parallel_exec(dt);
-				maximum_variation_current_global = calculate_maximum_variation.parallel_exec(dt);
+				maximum_variation_current_global = calculate_maximum_variation.parallel_exec(dt);*/
 
-				out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
+				/*out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
 					averaged_residual_T_current_global << "   " << maximum_residual_T_current_global << "   " <<
 					averaged_residual_k_current_global << "   " << maximum_residual_k_current_global << "   " <<
 					averaged_variation_current_global << "   " << maximum_variation_current_global << "\n";
 				out_file_all_information << std::fixed << std::setprecision(12) << ite_loop << "   " << ite << "   " <<
 					averaged_residual_T_current_local << "   " << averaged_residual_T_current_global << "   " << averaged_residual_k_current_local << "   " <<
-					averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
+					averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";*/
 			
 				//write_states.writeToFile(ite);
 			}
@@ -607,13 +622,13 @@ int main()
 				averaged_variation_current_global = calculate_regularization_global_variation.parallel_exec(dt);
 				maximum_variation_current_global = calculate_maximum_variation.parallel_exec(dt);
 
-				out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
+				/*out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
 					averaged_residual_T_current_global << "   " << maximum_residual_T_current_global << "   " <<
 					averaged_residual_k_current_global << "   " << maximum_residual_k_current_global << "   " <<
 					averaged_variation_current_global << "   " << maximum_variation_current_global << "\n";
 				out_file_all_information << std::fixed << std::setprecision(12) << ite_loop << "   " << ite << "   " <<
 					averaged_residual_T_current_local << "   " << averaged_residual_T_current_global << "   " << averaged_residual_k_current_local << "   " <<
-					averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
+					averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";*/
 			
 				//write_states.writeToFile(ite);
 			}
@@ -627,7 +642,7 @@ int main()
 		//----------------------------------------------------------------------
 		out_file_all_information << "This is the step of temperature splitting." << "\n";
 		std::cout << "averaged_residual_T_last_global is " << averaged_residual_T_last_global << std::endl;
-		while ((averaged_residual_T_current_global > averaged_residual_T_last_global || maximum_residual_T_current_global > maximum_residual_T_last_global && averaged_residual_T_current_global > 0.000005) || ite_T < ite_T_total)
+		while (((averaged_residual_T_current_global > averaged_residual_T_last_global || maximum_residual_T_current_global > maximum_residual_T_last_global) && averaged_residual_T_current_global > 0.000005) || ite_T < ite_T_total)
 		//while ((averaged_residual_T_current_global > averaged_residual_T_last_global || maximum_residual_T_current_global > maximum_residual_T_last_global) && averaged_residual_T_current_global > 0.000005)
 		//while (averaged_residual_T_current_global > averaged_residual_T_last_global || maximum_residual_T_current_global > maximum_residual_T_last_global)
 		//while ((maximum_residual_T_current_global > maximum_residual_T_last_global && averaged_residual_T_current_global > 0.000005) || ite_T < ite_T_total)
@@ -646,24 +661,24 @@ int main()
 
 			if (ite_T == 1)
 			{
-				out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
+				/*out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
 					averaged_residual_T_current_global << "   " << maximum_residual_T_current_global << "   " <<
 					averaged_residual_k_current_global << "   " << maximum_residual_k_current_global << "   " <<
 					averaged_variation_current_global << "   " << maximum_variation_current_global << "\n";
 				out_file_all_information << std::fixed << std::setprecision(12) << ite_loop << "   " << ite << "   " <<
 					averaged_residual_T_current_local << "   " << averaged_residual_T_current_global << "   " << averaged_residual_k_current_local << "   " <<
 					averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
-				out_file_residual_comp << std::fixed << std::setprecision(12) << ite_T_comp_opt << "   " << averaged_residual_T_current_global << "\n";
+				out_file_residual_comp << std::fixed << std::setprecision(12) << ite_T_comp_opt << "   " << averaged_residual_T_current_global << "\n";*/
 			}
 		}
-		out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
+		/*out_file_error_plot << std::fixed << std::setprecision(12) << ite << "   " <<
 			averaged_residual_T_current_global << "   " << maximum_residual_T_current_global << "   " <<
 			averaged_residual_k_current_global << "   " << maximum_residual_k_current_global << "   " <<
 			averaged_variation_current_global << "   " << maximum_variation_current_global << "\n";
 		out_file_all_information << std::fixed << std::setprecision(12) << ite_loop << "   " << ite << "   " <<
 			averaged_residual_T_current_local << "   " << averaged_residual_T_current_global << "   " << averaged_residual_k_current_local << "   " <<
 			averaged_residual_k_current_global << "   " << averaged_variation_current_local << "   " << averaged_variation_current_global << "\n";
-		out_file_residual_comp << std::fixed << std::setprecision(12) << ite_T_comp_opt << "   " << averaged_residual_T_current_global << "\n";
+		out_file_residual_comp << std::fixed << std::setprecision(12) << ite_T_comp_opt << "   " << averaged_residual_T_current_global << "\n";*/
 
 		opt_averaged_temperature = calculate_averaged_opt_temperature.parallel_exec(dt);
 		out_file_opt_temperature << std::fixed << std::setprecision(12) << ite_T_comp_opt << "   " << opt_averaged_temperature << "\n";
@@ -673,11 +688,13 @@ int main()
 		if (nonopt_averaged_temperature > opt_averaged_temperature)
 		{
 			learning_rate_alpha = learning_rate_alpha;
+			current_eta_regularization = current_eta_regularization;
 			std::cout << "The learning rate is fixed!" << std::endl;
 		}
 		else if (nonopt_averaged_temperature < opt_averaged_temperature)
 		{
-			learning_rate_alpha = 0.95 * learning_rate_alpha;
+			learning_rate_alpha = 1.05 * learning_rate_alpha;
+			current_eta_regularization = 1.05 * current_eta_regularization;
 			std::cout << "The learning rate is decreased by optimization process!" << std::endl;
 		}
 

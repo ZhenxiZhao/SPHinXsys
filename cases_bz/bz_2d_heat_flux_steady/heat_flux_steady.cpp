@@ -254,19 +254,17 @@ int main(int ac, char* av[])
 	//----------------------------------------------------------------------
 	//	Define the methods for I/O operations and observations of the simulation.
 	//----------------------------------------------------------------------
-	BodyStatesRecordingToVtp write_states(io_environment, sph_system.real_bodies_);
+	BodyStatesRecordingToPlt write_states(io_environment, sph_system.real_bodies_);
 	RestartIO	restart_io(io_environment, sph_system.real_bodies_);
 	ObservedQuantityRecording<Real> write_solid_temperature("Phi", io_environment, temperature_observer_contact);
 	/************************************************************************/
 	/* Splitting thermal diffusivity optimization                           */
 	/************************************************************************/
 	DiffusionBodyRelaxation temperature_relaxation(diffusion_body_complex);
-	InteractionDynamics<UpdateUnitNormalVector<SolidParticles, Solid, SolidParticles, Solid>>
-		update_diffusion_body_normal_vector(diffusion_body_complex);
-	InteractionDynamics<UpdateUnitNormalVector<SolidParticles, Solid, SolidParticles, Solid>>
-		update_wall_boundary_normal_vector(wall_boundary_complex);
-	InteractionSplit<TemperatureSplittingByPDEWithBoundary<SolidParticles, Solid, SolidParticles, Solid, Real>> 
-		temperature_splitting_pde(diffusion_body_complex, "Phi");
+	InteractionDynamics<UpdateUnitNormalVector<SolidParticles, Solid, SolidParticles, Solid>> update_diffusion_body_normal_vector(diffusion_body_complex);
+	InteractionDynamics<UpdateUnitNormalVector<SolidParticles, Solid, SolidParticles, Solid>> update_wall_boundary_normal_vector(wall_boundary_complex);
+	InteractionSplit<TemperatureSplittingByPDEWithBoundary<SolidParticles, Solid, SolidParticles, Solid, Real>> temperature_splitting_pde(diffusion_body_complex, "Phi");
+	ReduceAverage<DiffusionReactionSpeciesSummation<SolidParticles, Solid>> calculate_averaged_temperature(diffusion_body, "Phi");
 	//----------------------------------------------------------------------
 	//	Prepare the simulation with cell linked list, configuration
 	//	and case specified initial condition if necessary. 
@@ -312,6 +310,7 @@ int main(int ac, char* av[])
 			write_states.writeToFile(ite);
 			write_solid_temperature.writeToFile(ite);
 			std::cout << "N= " << ite << " Time: " << GlobalStaticVariables::physical_time_ << "	dt: " << dt << "\n";
+			std::cout << "The averaged temperature is " << calculate_averaged_temperature.parallel_exec() << std::endl;
 		}
 
 		temperature_splitting_pde.parallel_exec(dt);

@@ -61,7 +61,7 @@ namespace SPH
 	
 			Real diff_coff_ij = this->species_diffusion_[this->phi_]->getInterParticleDiffusionCoff(index_i, index_j, e_ij_);
 			Real parameter_b = 2.0 * diff_coff_ij * inner_neighborhood.dW_ijV_j_[n] * dt / r_ij_;
-			this->variable_[index_j] -= parameter_b * parameter_k;
+			this->variable_[index_j] -= parameter_k * parameter_b;
 		}
 	}
 	//=================================================================================================//
@@ -115,7 +115,7 @@ namespace SPH
 			for (size_t n = 0; n != contact_neighborhood.current_size_; ++n)
 			{
 				size_t& index_j = contact_neighborhood.j_[n];
-
+				
 				if (variable_k[index_j] > 0.0)
 				{
 					// linear projection

@@ -24,7 +24,6 @@ namespace SPH
 		VariableType& variable_i = this->variable_[index_i];
 		ErrorAndParameters<VariableType> error_and_parameters;
 		Neighborhood& inner_neighborhood = this->inner_configuration_[index_i];
-		
 		for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
 		{
 			size_t& index_j = inner_neighborhood.j_[n];
@@ -36,18 +35,11 @@ namespace SPH
 			Real parameter_b = phi_ij * dW_ijV_j_ * dt / r_ij_;
 
 			error_and_parameters.error_ -= variable_derivative * parameter_b;
-			if (this->boundary_index_[index_i] == 0) //not add the B for boundary particles.
-			{
-				error_and_parameters.a_ += parameter_b;
-			}
-			if (this->boundary_index_[index_j] == 0) //not add the B for boundary particles.
-			{
-				error_and_parameters.c_ += parameter_b * parameter_b;
-			}
+			error_and_parameters.a_ += parameter_b;
+			error_and_parameters.c_ += parameter_b * parameter_b;
 		}
-		/*If the pseudo time step is used, the a should minu 1 here, and case 1 should uncomment the following line. */
-		//error_and_parameters.a_ -= 1;
-		error_and_parameters.error_ = error_and_parameters.error_ - this->heat_source_[index_i] * dt;
+		error_and_parameters.a_ -= 1;
+		error_and_parameters.error_ -= this->heat_source_[index_i] * dt;
 		return error_and_parameters;
 	}
 	//=================================================================================================//
@@ -58,11 +50,8 @@ namespace SPH
 		Real parameter_l = error_and_parameters.a_ * error_and_parameters.a_ + error_and_parameters.c_;
 		VariableType parameter_k = error_and_parameters.error_ / (parameter_l + TinyReal);
 		this->parameter_recovery_[index_i] = this->variable_[index_i];
-		if (this->boundary_index_[index_i] == 0) // don't modify the parameter of boundary particles by PDE.
-		{
-			this->variable_[index_i] += parameter_k * error_and_parameters.a_;
-			if (this->variable_[index_i] < 0.000001) { this->variable_[index_i] = 0.000001; }
-		}
+		this->variable_[index_i] += parameter_k * error_and_parameters.a_;
+		if (this->variable_[index_i] < 0.000001) { this->variable_[index_i] = 0.000001; }
 
 		Neighborhood& inner_neighborhood = this->inner_configuration_[index_i];
 		for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
@@ -75,45 +64,48 @@ namespace SPH
 			Real parameter_b = phi_ij * dW_ijV_j_ * dt / r_ij_;
 
 			this->parameter_recovery_[index_j] = this->variable_[index_j];
-			if (this->boundary_index_[index_j] == 0) // dno't modify the parameter of boundary particles by PDE.
-			{
-				this->variable_[index_j] += parameter_k * parameter_b;
-				if (this->variable_[index_j] < 0.000001) { this->variable_[index_j] = 0.000001; }
-			}
-		}
+			this->variable_[index_j] += parameter_k * parameter_b;
+			if (this->variable_[index_j] < 0.000001) { this->variable_[index_j] = 0.000001; }
+		}	
 	}
 	//=================================================================================================//
 	template <class BaseParticlesType, class BaseMaterialType, typename VariableType, int NUM_SPECIES>
 	void ParameterSplittingByPDEInner<BaseParticlesType, BaseMaterialType, VariableType, NUM_SPECIES>::
-		 interaction(size_t index_i, Real dt)
+		interaction(size_t index_i, Real dt)
 	{
-		/*Not use the pseudo time step and directly solve the equation. */
-		if (this->heat_flux_[index_i] == 0)
+		/* With Pseudo Time Step */
+		this->splitting_index_[index_i] = 0;
+		ErrorAndParameters<VariableType> error_and_parameters = computeErrorAndParameters(index_i, dt);
+		error_and_parameters.error_ = error_and_parameters.error_ - this->residual_T_local_[index_i];
+		updateStatesByError(index_i, dt, error_and_parameters);
+		this->residual_k_local_[index_i] = error_and_parameters.error_;
+
+		ErrorAndParameters<VariableType> error_and_parameters_aft = computeErrorAndParameters(index_i, dt);
+		error_and_parameters_aft.error_ = error_and_parameters_aft.error_ - this->residual_T_local_[index_i];
+		this->residual_sp_pde_[index_i] = error_and_parameters_aft.error_;
+
+		if (abs(this->residual_sp_pde_[index_i]) > abs(this->residual_k_local_[index_i]))
 		{
-			/* Here the residual_T_local is the target PDE residual before imposing objective function. */
-			ErrorAndParameters<VariableType> error_and_parameters = computeErrorAndParameters(index_i, dt);
-			error_and_parameters.error_ = error_and_parameters.error_ - this->residual_T_local_[index_i];
-			this->residual_k_local_[index_i] = error_and_parameters.error_;
-			updateStatesByError(index_i, dt, error_and_parameters);
-		}
+			this->variable_[index_i] = this->parameter_recovery_[index_i];
+			Neighborhood& inner_neighborhood = this->inner_configuration_[index_i];
+			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
+			{
+				size_t& index_j = inner_neighborhood.j_[n];
+				this->variable_[index_j] = this->parameter_recovery_[index_j];
+			}
 
-		/*Use the pseudo time step and positive/negative time step to decide the gradient direction.
-		  Note, case 1 should use the following solving method. */
+			ErrorAndParameters<VariableType> error_and_parameters_reverse = computeErrorAndParameters(index_i, -dt);
+			error_and_parameters_reverse.error_ = error_and_parameters_reverse.error_ + this->residual_T_local_[index_i];
+			updateStatesByError(index_i, -dt, error_and_parameters_reverse);
+			this->residual_k_local_[index_i] = error_and_parameters_reverse.error_;
 
-		/*if (this->heat_flux_[index_i] == 0)
-		{
-			this->splitting_index_[index_i] = 0;
-			ErrorAndParameters<VariableType> error_and_parameters = computeErrorAndParameters(index_i, dt);
-			error_and_parameters.error_ = error_and_parameters.error_ - this->residual_T_local_[index_i];
-			this->residual_k_local_[index_i] = error_and_parameters.error_;
-			updateStatesByError(index_i, dt, error_and_parameters);
-
-			ErrorAndParameters<VariableType> error_and_parameters_aft = computeErrorAndParameters(index_i, dt);
-			error_and_parameters_aft.error_ = error_and_parameters_aft.error_ - this->residual_T_local_[index_i];
+			ErrorAndParameters<VariableType> error_and_parameters_aft = computeErrorAndParameters(index_i, -dt);
+			error_and_parameters_aft.error_ = error_and_parameters_aft.error_ + this->residual_T_local_[index_i];
 			this->residual_sp_pde_[index_i] = error_and_parameters_aft.error_;
 
-			if (abs(this->residual_sp_pde_[index_i] > abs(this->residual_k_local_[index_i])))
+			if (abs(this->residual_sp_pde_[index_i]) > abs(this->residual_k_local_[index_i]))
 			{
+				this->splitting_index_[index_i] = 0;
 				this->variable_[index_i] = this->parameter_recovery_[index_i];
 				Neighborhood& inner_neighborhood = this->inner_configuration_[index_i];
 				for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
@@ -121,40 +113,17 @@ namespace SPH
 					size_t& index_j = inner_neighborhood.j_[n];
 					this->variable_[index_j] = this->parameter_recovery_[index_j];
 				}
-
-				ErrorAndParameters<VariableType> error_and_parameters_reverse = computeErrorAndParameters(index_i, -dt);
-				error_and_parameters_reverse.error_ = error_and_parameters_reverse.error_ + this->residual_T_local_[index_i];
-				this->residual_k_local_[index_i] = error_and_parameters_reverse.error_;
-				updateStatesByError(index_i, -dt, error_and_parameters_reverse);
-
-				ErrorAndParameters<VariableType> error_and_parameters_aft = computeErrorAndParameters(index_i, -dt);
-				error_and_parameters_aft.error_ = error_and_parameters_aft.error_ + this->residual_T_local_[index_i];
-				this->residual_sp_pde_[index_i] = error_and_parameters_aft.error_;
-
-				if (abs(this->residual_sp_pde_[index_i]) > abs(this->residual_k_local_[index_i]))
-				{
-					this->splitting_index_[index_i] = 0;
-					this->variable_[index_i] = this->parameter_recovery_[index_i];
-					Neighborhood& inner_neighborhood = this->inner_configuration_[index_i];
-					for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
-					{
-						size_t& index_j = inner_neighborhood.j_[n];
-						this->variable_[index_j] = this->parameter_recovery_[index_j];
-					}
-				}
-
-				else if (abs(this->residual_sp_pde_[index_i]) <= abs(this->residual_k_local_[index_i]))
-				{
-					this->splitting_index_[index_i] = 2;
-				}
 			}
-
 			else if (abs(this->residual_sp_pde_[index_i]) <= abs(this->residual_k_local_[index_i]))
 			{
-				this->splitting_index_[index_i] = 1;
+				this->splitting_index_[index_i] = 2;
 			}
-		}*/
-	}
+		}
+		else if (abs(this->residual_sp_pde_[index_i]) <= abs(this->residual_k_local_[index_i]))
+		{
+			this->splitting_index_[index_i] = 1;
+		}
+	};
 	//=================================================================================================//
 	template <class BaseParticlesType, class BaseMaterialType, class ContactBaseParticlesType,
 		      class ContactBaseMaterialType, typename VariableType, int NUM_SPECIES>
@@ -196,18 +165,21 @@ namespace SPH
 			for (size_t n = 0; n != contact_neighborhood.current_size_; ++n)
 			{
 				size_t& index_j = contact_neighborhood.j_[n];
-				Real& dW_ijV_j_ = contact_neighborhood.dW_ijV_j_[n];
-				Real& r_ij_ = contact_neighborhood.r_ij_[n];
-
-				VariableType variable_derivative = variable_i;
-
-				Real phi_ij = this->species_modified_[index_i] - species_k[this->phi_][index_j];
-				Real parameter_b = 2.0 * phi_ij * dW_ijV_j_ * dt / r_ij_;
 
 				if (species_k[this->phi_][index_j] > 0.0)
 				{
+					VariableType variable_derivative = variable_i;
+					Real phi_ij = this->species_modified_[index_i] - species_k[this->phi_][index_j];
+					Real parameter_b = 2.0 * phi_ij * contact_neighborhood.dW_ijV_j_[n] * dt / contact_neighborhood.r_ij_[n];
+
 					error_and_parameters.error_ -= variable_derivative * parameter_b;
 					error_and_parameters.a_ += parameter_b;
+				}
+
+				if (heat_flux_k[index_j] != 0.0)
+				{
+					Vecd n_ij = this->normal_vector_[index_i] - normal_vector_k[index_j];
+					error_and_parameters.error_ -= heat_flux_k[index_j] * contact_neighborhood.dW_ijV_j_[n] * contact_neighborhood.e_ij_[n].dot(n_ij) * dt;
 				}
 			}
 		}
@@ -223,16 +195,9 @@ namespace SPH
 	void UpdateParameterPDEResidual<ParameterSplittingType, BaseBodyRelationType, VariableType>::
 		interaction(size_t index_i, Real dt)
 	{
-		if (this->heat_flux_[index_i] == 0)
-		{
-			ErrorAndParameters<VariableType> error_and_parameters = this->computeErrorAndParameters(index_i, dt);
-			error_and_parameters.error_ = error_and_parameters.error_ - this->residual_T_local_[index_i];
-			this->residual_k_global_[index_i] = error_and_parameters.error_;
-		}
-		else //don't calculate the error for those inner boundary particles.
-		{
-			this->residual_k_global_[index_i] = 0.0;
-		}
+		ErrorAndParameters<VariableType> error_and_parameters = this->computeErrorAndParameters(index_i, dt);
+		error_and_parameters.error_ = error_and_parameters.error_ - this->residual_T_local_[index_i];
+		this->residual_k_global_[index_i] = error_and_parameters.error_;
 	}
 	//=================================================================================================//
 	template <class BaseParticlesType, class BaseMaterialType, typename VariableType, int NUM_SPECIES>
