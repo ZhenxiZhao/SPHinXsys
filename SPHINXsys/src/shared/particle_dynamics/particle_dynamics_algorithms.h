@@ -305,16 +305,30 @@ namespace SPH
 	 * @class InteractionDynamics
 	 * @brief This is the class with a single step of particle interaction with other particles
 	 */
-	template <class LocalDynamicsType>
-	class InteractionDynamics : public BaseInteractionDynamics<LocalDynamicsType>
+	template <typename... MultipleLocalDynamics>
+	class InteractionDynamics;
+
+	template <>
+	class InteractionDynamics<>
 	{
 	public:
-		template <class BodyRelationType, typename... Args>
-		InteractionDynamics(BodyRelationType &body_relation, Args &&...args)
-			: InteractionDynamics(true, body_relation, std::forward<Args>(args)...)
+		template <typename... Args>
+		InteractionDynamics(Args &&...args){};
+
+		void runMainStep(Real dt){};
+	};
+
+	template <typename LeadingLocalDynamics, typename... RestLocalDynamics>
+	class InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>
+		: public BaseInteractionDynamics<LeadingLocalDynamics>
+	{
+	public:
+		template <typename LeadingRelation, typename... RestRelations, typename... Args>
+		InteractionDynamics(LeadingRelation &first_relation, RestRelations &&...rest_relations, Args &&...args)
+			: InteractionDynamics(true, first_relation, std::forward<RestRelations>(rest_relations)..., std::forward<Args>(args)...)
 		{
-			static_assert(!has_initialize<LocalDynamicsType>::value &&
-							  !has_update<LocalDynamicsType>::value,
+			static_assert(!has_initialize<LeadingLocalDynamics>::value &&
+							  !has_update<LeadingLocalDynamics>::value,
 						  "LocalDynamicsType does not fulfill InteractionDynamics requirements");
 		};
 		virtual ~InteractionDynamics(){};
@@ -324,6 +338,8 @@ namespace SPH
 			particle_for(this->identifier_.LoopRange(),
 						 [&](size_t i)
 						 { this->interaction(i, dt); });
+
+			rest_interact_dynamics_.runMainStep(dt);
 		}
 		/** parallel run the main interaction step between particles. */
 		virtual void parallel_runMainStep(Real dt) override
@@ -334,31 +350,35 @@ namespace SPH
 		}
 
 	protected:
-		template <class BodyRelationType, typename... Args>
-		InteractionDynamics(bool mostDerived, BodyRelationType &body_relation, Args &&...args)
-			: BaseInteractionDynamics<LocalDynamicsType>(body_relation, std::forward<Args>(args)...){};
+		template <typename LeadingRelation, typename... RestRelations, typename... Args>
+		InteractionDynamics(bool mostDerived, LeadingRelation &first_relation, RestRelations &&...rest_relations, Args &&...args)
+			: BaseInteractionDynamics<LeadingLocalDynamics>(first_relation, std::forward<Args>(args)...),
+			  rest_interact_dynamics_(std::forward<RestRelations>(rest_relations)..., std::forward<Args>(args)...){};
+
+		InteractionDynamics<RestLocalDynamics...> rest_interact_dynamics_;
 	};
 
 	/**
 	 * @class InteractionWithUpdate
 	 * @brief This class includes an interaction and a update steps
 	 */
-	template <class LocalDynamicsType>
-	class InteractionWithUpdate : public InteractionDynamics<LocalDynamicsType>
+	template <typename LeadingLocalDynamics, typename... RestLocalDynamics>
+	class InteractionWithUpdate : public InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>
 	{
 	public:
-		template <class BodyRelationType, typename... Args>
-		InteractionWithUpdate(BodyRelationType &body_relation, Args &&...args)
-			: InteractionWithUpdate(true, body_relation, std::forward<Args>(args)...)
+		template <typename LeadingRelation, typename... RestRelations, typename... Args>
+		InteractionWithUpdate(LeadingRelation &first_relation, RestRelations &&...rest_relations, Args &&...args)
+			: InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>(
+				  false, first_relation, std::forward<RestRelations>(rest_relations)..., std::forward<Args>(args)...)
 		{
-			static_assert(!has_initialize<LocalDynamicsType>::value,
+			static_assert(!has_initialize<LeadingLocalDynamics>::value,
 						  "LocalDynamicsType does not fulfill InteractionWithUpdate requirements");
 		}
 		virtual ~InteractionWithUpdate(){};
 
 		virtual void exec(Real dt = 0.0) override
 		{
-			InteractionDynamics<LocalDynamicsType>::exec(dt);
+			InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>::exec(dt);
 			particle_for(this->identifier_.LoopRange(),
 						 [&](size_t i)
 						 { this->update(i, dt); });
@@ -366,17 +386,11 @@ namespace SPH
 
 		virtual void parallel_exec(Real dt = 0.0) override
 		{
-			InteractionDynamics<LocalDynamicsType>::parallel_exec(dt);
+			InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>::parallel_exec(dt);
 			particle_parallel_for(this->identifier_.LoopRange(),
 								  [&](size_t i)
 								  { this->update(i, dt); });
 		};
-
-	protected:
-		template <class BodyRelationType, typename... Args>
-		InteractionWithUpdate(bool mostDerived, BodyRelationType &body_relation, Args &&...args)
-			: InteractionDynamics<LocalDynamicsType>(
-				  false, body_relation, std::forward<Args>(args)...) {}
 	};
 
 	/**
@@ -385,14 +399,14 @@ namespace SPH
 	 * It is the most complex particle dynamics type,
 	 * and is typically for computing the main fluid and solid dynamics.
 	 */
-	template <class LocalDynamicsType>
-	class Dynamics1Level : public InteractionDynamics<LocalDynamicsType>
+	template <typename LeadingLocalDynamics, typename... RestLocalDynamics>
+	class Dynamics1Level : public InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>
 	{
 	public:
-		template <class BodyRelationType, typename... Args>
-		Dynamics1Level(BodyRelationType &body_relation, Args &&...args)
-			: InteractionDynamics<LocalDynamicsType>(
-				  false, body_relation, std::forward<Args>(args)...) {}
+		template <typename LeadingRelation, typename... RestRelations, typename... Args>
+		Dynamics1Level(LeadingRelation &first_relation, RestRelations &&...rest_relations, Args &&...args)
+			: InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>(
+				  false, first_relation, std::forward<RestRelations>(rest_relations)..., std::forward<Args>(args)...) {}
 		virtual ~Dynamics1Level(){};
 
 		virtual void exec(Real dt = 0.0) override
@@ -404,7 +418,7 @@ namespace SPH
 						 [&](size_t i)
 						 { this->initialization(i, dt); });
 
-			InteractionDynamics<LocalDynamicsType>::runInteraction(dt);
+			InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>::runInteraction(dt);
 
 			particle_for(this->identifier_.LoopRange(),
 						 [&](size_t i)
@@ -420,7 +434,7 @@ namespace SPH
 								  [&](size_t i)
 								  { this->initialization(i, dt); });
 
-			InteractionDynamics<LocalDynamicsType>::parallel_runInteraction(dt);
+			InteractionDynamics<LeadingLocalDynamics, RestLocalDynamics...>::parallel_runInteraction(dt);
 
 			particle_parallel_for(this->identifier_.LoopRange(),
 								  [&](size_t i)
