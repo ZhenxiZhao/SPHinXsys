@@ -29,20 +29,27 @@
 #ifndef XSIMD_EIGEN_H
 #define XSIMD_EIGEN_H
 
-#include <xsimd/xsimd.hpp>
-#include <Eigen/Core>
+#include <base_data_package.h>
+
+#include <include/xsimd/xsimd.hpp>
 #define EIGEN_DONT_VECTORIZE
+
+namespace SPH
+{
+    using RealX = xsimd::batch<Real, xsimd::default_arch>;
+    constexpr size_t XsimdSize = xsimd::simd_type<Real>::size;
+}
+
 namespace Eigen
 {
-    template <class Arch>
-    using b_type = xsimd::batch<double, Arch>;
+
     template <>
-    struct NumTraits<b_type<>>
-        : NumTraits<double> // permits to get the epsilon, dummy_precision, lowest, highest functions
+    struct NumTraits<SPH::RealX>
+        : NumTraits<SPH::Real> // permits to get the epsilon, dummy_precision, lowest, highest functions
     {
-        typedef adtl::adouble Real;
-        typedef adtl::adouble NonInteger;
-        typedef adtl::adouble Nested;
+        typedef SPH::RealX Real;
+        typedef SPH::RealX NonInteger;
+        typedef SPH::RealX Nested;
 
         enum
         {
@@ -55,6 +62,16 @@ namespace Eigen
             MulCost = 3
         };
     };
+}
+
+namespace SPH
+{
+    /** Vector with float point number in batches.*/
+    using Vec2X = Eigen::Matrix<RealX, 2, 1>;
+    using Vec3X = Eigen::Matrix<RealX, 3, 1>;
+    /** Small, 2*2 and 3*3, matrix with float point number in batches. */
+    using Mat2X = Eigen::Matrix<RealX, 2, 2>;
+    using Mat3X = Eigen::Matrix<RealX, 3, 3>;
 }
 
 #endif // XSIMD_EIGEN_H
