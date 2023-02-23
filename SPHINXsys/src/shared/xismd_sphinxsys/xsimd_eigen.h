@@ -44,7 +44,7 @@ namespace Eigen
 
     template <>
     struct NumTraits<SPH::RealX>
-        : NumTraits<SPH::Real> // permits to get the epsilon, dummy_precision, lowest, highest functions
+        : GenericNumTraits<SPH::RealX>
     {
         typedef SPH::RealX Real;
         typedef SPH::RealX NonInteger;

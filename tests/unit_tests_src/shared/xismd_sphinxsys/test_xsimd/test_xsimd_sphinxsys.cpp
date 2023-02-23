@@ -48,9 +48,8 @@ TEST(test_XsimdVecd, test_SimpleOperations)
 	{
 		helper.assign(&a[i], ba);
 		helper.assign(&b[i], bb);
-		x_sum += ba + bb;
+		x_sum += (ba + bb) / 2.0;
 	}
-	x_sum *= 0.5;
 
 	Vec2d sum = Vec2d::Zero();
 	helper.reduce(x_sum, sum);
