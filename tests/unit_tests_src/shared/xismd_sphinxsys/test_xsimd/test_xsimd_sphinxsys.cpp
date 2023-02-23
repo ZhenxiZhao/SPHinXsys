@@ -2,7 +2,6 @@
 #include "xsimd_eigen.h"
 
 #include <gtest/gtest.h>
-#include "xsimd_eigen.h"
 
 #define EIGEN_DONT_VECTORIZE
 
