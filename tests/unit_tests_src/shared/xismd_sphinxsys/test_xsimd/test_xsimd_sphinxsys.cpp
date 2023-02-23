@@ -39,14 +39,21 @@ TEST(test_XsimdVecd, test_SimpleOperations)
 	a.resize(vec_size, Vec2d(1.0, 1.0));
 	b.resize(vec_size, Vec2d(2.0, 2.0));
 
+	StdLargeVec<size_t> indexes;
+	indexes.resize(vec_size);
+	for (size_t i = 0; i != vec_size; i++)
+	{
+		indexes[i] = i;
+	}
+
 	Vec2X x_sum = Vec2X::Zero();
 	Vec2XHelper helper;
 	Vec2X ba, bb;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		helper.assign(&a[i], ba);
-		helper.assign(&b[i], bb);
+		helper.assign(&a[i], &indexes[i], ba);
+		helper.assign(&b[i], &indexes[i], bb);
 		x_sum += (ba + bb) / 2.0;
 	}
 
