@@ -30,6 +30,7 @@ namespace SPH
 		auto &phi_gradient = data_pkg->getPackageData(phi_gradient_);
 		auto &kernel_weight = data_pkg->getPackageData(kernel_weight_);
 		auto &kernel_gradient = data_pkg->getPackageData(kernel_gradient_);
+		auto& kernel_second_gradient = data_pkg->getPackageData(kernel_second_gradient_);
 
 		data_pkg->for_each_data(
 			[&](int i, int j)
@@ -39,6 +40,7 @@ namespace SPH
 				phi_gradient[i][j] = Vecd::Ones();
 				kernel_weight[i][j] = far_field_level_set < 0.0 ? 0 : 1.0;
 				kernel_gradient[i][j] = Vec2d::Zero();
+				kernel_second_gradient[i][j] = Matd::Zero();
 			});
 	}
 	//=================================================================================================//
@@ -450,6 +452,66 @@ namespace SPH
 				}
 		}
 
+		return integral * data_spacing_ * data_spacing_;
+	}
+	//=============================================================================================//
+	Matd LevelSet::computeKernelSecondGradientIntegral(const Vecd& position)
+	{
+		Real phi = probeSignedDistance(position);
+		Real cutoff_radius = kernel_.CutOffRadius(global_h_ratio_);
+		Real threshold = cutoff_radius + data_spacing_;
+
+		Matd integral = Matd::Zero();
+		if (fabs(phi) < threshold)
+		{
+			Vecu global_index_ = global_mesh_.CellIndexFromPosition(position);
+			for (int i = -3; i != 4; ++i)
+				for (int j = -3; j != 4; ++j)
+				{
+					Vecu neighbor_index = Vecu(global_index_[0] + i, global_index_[1] + j);
+					Real phi_neighbor = DataValueFromGlobalIndex(phi_, neighbor_index);
+					if (phi_neighbor > -data_spacing_)
+					{
+						Vecd displacement = position - global_mesh_.GridPositionFromIndex(neighbor_index);
+						Real distance = displacement.norm();
+						if (distance < cutoff_radius)
+							integral += kernel_.d2W(global_h_ratio_, distance, displacement) *
+							            computeHeaviside(phi_neighbor, data_spacing_) * 
+							            displacement * displacement.transpose() / 
+							            (distance * distance + TinyReal);
+					}
+				}
+		}
+
+		return integral * data_spacing_ * data_spacing_;
+	}
+	//=============================================================================================//
+	Matd LevelSet::computeDisplacementKernelGradientIntegral(const Vecd& position)
+	{
+		Real phi = probeSignedDistance(position);
+		Real cutoff_radius = kernel_.CutOffRadius(global_h_ratio_);
+		Real threshold = cutoff_radius + data_spacing_;
+
+		Matd integral = Matd::Zero();
+		if (fabs(phi) < threshold)
+		{
+			Vecu global_index_ = global_mesh_.CellIndexFromPosition(position);
+			for (int i = -3; i != 4; ++i)
+				for (int j = -3; j != 4; ++j)
+				{
+					Vecu neighbor_index = Vecu(global_index_[0] + i, global_index_[1] + j);
+					Real phi_neighbor = DataValueFromGlobalIndex(phi_, neighbor_index);
+					if (phi_neighbor > -data_spacing_)
+					{
+						Vecd displacement = position - global_mesh_.GridPositionFromIndex(neighbor_index);
+						Real distance = displacement.norm();
+						if (distance < cutoff_radius)
+							integral += kernel_.dW(global_h_ratio_, distance, displacement) *
+							            computeHeaviside(phi_neighbor, data_spacing_) * 
+							            displacement * displacement.transpose() / (distance + TinyReal);
+					}
+				}
+		}
 		return integral * data_spacing_ * data_spacing_;
 	}
 	//=============================================================================================//

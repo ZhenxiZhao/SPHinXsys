@@ -38,6 +38,8 @@ namespace SPH
 		  phi_gradient_(all_variables_, "LevelsetGradient"),
 		  kernel_weight_(all_variables_, "KernelWeight"),
 		  kernel_gradient_(all_variables_, "KernelGradient"),
+		  kernel_second_gradient_(all_variables_, "KernelSecondGradient"),
+		  displacement_kernel_gradient_(all_variables_,"DisplacementKernelGradient"),
 		  kernel_(*sph_adaptation.getKernel())
 	{
 		Real far_field_distance = grid_spacing_ * (Real)buffer_width_;
@@ -71,6 +73,12 @@ namespace SPH
 								 data_pkg->assignByPosition(
 									 kernel_gradient_, [&](const Vecd &position) -> Vecd
 									 { return computeKernelGradientIntegral(position); });
+								 data_pkg->assignByPosition(
+									 kernel_second_gradient_, [&](const Vecd& position) -> Matd
+									 { return computeKernelSecondGradientIntegral(position); });
+								 data_pkg->assignByPosition(
+									 displacement_kernel_gradient_, [&](const Vecd& position) -> Matd
+									 { return computeDisplacementKernelGradientIntegral(position); });
 							 });
 	}
 	//=================================================================================================//
@@ -107,6 +115,16 @@ namespace SPH
 	Vecd LevelSet::probeKernelGradientIntegral(const Vecd &position, Real h_ratio)
 	{
 		return probeMesh(kernel_gradient_, position);
+	}
+	//=================================================================================================//
+	Matd LevelSet::probeKernelSecondGradientIntegral(const Vecd& position, Real h_ratio)
+	{
+		return probeMesh(kernel_second_gradient_, position);
+	}
+	//=================================================================================================//
+	Matd LevelSet::probeDisplacementKernelGradientIntegral(const Vecd& position, Real h_ratio)
+	{
+		return probeMesh(displacement_kernel_gradient_, position);
 	}
 	//=================================================================================================//
 	void LevelSet::redistanceInterface()
@@ -317,6 +335,28 @@ namespace SPH
 					 (mesh_levels_[coarse_level + 1]->global_h_ratio_ - mesh_levels_[coarse_level]->global_h_ratio_);
 		Vecd coarse_level_value = mesh_levels_[coarse_level]->probeKernelGradientIntegral(position);
 		Vecd fine_level_value = mesh_levels_[coarse_level + 1]->probeKernelGradientIntegral(position);
+
+		return alpha * coarse_level_value + (1.0 - alpha) * fine_level_value;
+	}
+	//=================================================================================================//
+	Matd MultilevelLevelSet::probeKernelSecondGradientIntegral(const Vecd& position, Real h_ratio)
+	{
+		size_t coarse_level = getCoarseLevel(h_ratio);
+		Real alpha = (mesh_levels_[coarse_level + 1]->global_h_ratio_ - h_ratio) /
+			         (mesh_levels_[coarse_level + 1]->global_h_ratio_ - mesh_levels_[coarse_level]->global_h_ratio_);
+		Matd coarse_level_value = mesh_levels_[coarse_level]->probeKernelSecondGradientIntegral(position);
+		Matd fine_level_value = mesh_levels_[coarse_level + 1]->probeKernelSecondGradientIntegral(position);
+
+		return alpha * coarse_level_value + (1.0 - alpha) * fine_level_value;
+	}
+	//=================================================================================================//
+	Matd MultilevelLevelSet::probeDisplacementKernelGradientIntegral(const Vecd& position, Real h_ratio)
+	{
+		size_t coarse_level = getCoarseLevel(h_ratio);
+		Real alpha = (mesh_levels_[coarse_level + 1]->global_h_ratio_ - h_ratio) /
+			         (mesh_levels_[coarse_level + 1]->global_h_ratio_ - mesh_levels_[coarse_level]->global_h_ratio_);
+		Matd coarse_level_value = mesh_levels_[coarse_level]->probeDisplacementKernelGradientIntegral(position);
+		Matd fine_level_value = mesh_levels_[coarse_level + 1]->probeDisplacementKernelGradientIntegral(position);
 
 		return alpha * coarse_level_value + (1.0 - alpha) * fine_level_value;
 	}

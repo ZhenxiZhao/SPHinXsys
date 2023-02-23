@@ -136,7 +136,7 @@ namespace SPH
 		};
 
 	public:
-		PeriodicConditionUsingCellLinkedList(RealBody &real_body, BoundingBox bounding_bounds, int axis)
+		PeriodicConditionUsingCellLinkedList(RealBody &real_body, BoundingBox bounding_bounds, const int axis)
 			: BasePeriodicCondition(real_body, bounding_bounds, axis),
 			  bounding_(periodic_translation_, bound_cells_data_, real_body, bounding_bounds, axis),
 			  update_cell_linked_list_(periodic_translation_, bound_cells_data_, real_body, bounding_bounds, axis){};

@@ -231,7 +231,7 @@ namespace SPH
 
 	/**
 	 * @class QuantitySummation
-	 * @brief Compute the summation of  a particle variable in a body
+	 * @brief Compute the summation of a particle variable in a body
 	 */
 	template <typename VariableType>
 	class QuantitySummation : public LocalDynamicsReduce<VariableType, ReduceSum<VariableType>>,
@@ -246,10 +246,37 @@ namespace SPH
 			  GeneralDataDelegateSimple(sph_body),
 			  variable_(*this->particles_->template getVariableByName<VariableType>(variable_name))
 		{
-			this->quantity_name_ = variable_name + "Summation";
+			this->quantity_name_ = variable_name + "_Summation";
 		};
 		virtual ~QuantitySummation(){};
 
+		VariableType reduce(size_t index_i, Real dt = 0.0)
+		{
+			return variable_[index_i];
+		};
+	};
+
+	/**
+	 * @class QuantityMaximum
+	 * @brief Compute the maximum of a particle variable in a body
+	 */
+	template <typename VariableType>
+	class QuantityMaximum : public LocalDynamicsReduce<VariableType, ReduceMax>,
+		                    public GeneralDataDelegateSimple
+	{
+	protected:
+		StdLargeVec<VariableType> &variable_;
+
+	public:
+		explicit QuantityMaximum(SPHBody& sph_body, const std::string& variable_name)
+			: LocalDynamicsReduce<VariableType, ReduceMax>(sph_body, ZeroData<VariableType>::value),
+			GeneralDataDelegateSimple(sph_body),
+			variable_(*this->particles_->template getVariableByName<VariableType>(variable_name))
+		{
+			this->quantity_name_ = variable_name + "_Maximum";
+		};
+		virtual ~QuantityMaximum() {};
+		
 		VariableType reduce(size_t index_i, Real dt = 0.0)
 		{
 			return variable_[index_i];

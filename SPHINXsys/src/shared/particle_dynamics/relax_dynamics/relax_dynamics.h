@@ -10,7 +10,7 @@
  *																			*
  * SPHinXsys is partially funded by German Research Foundation				*
  * (Deutsche Forschungsgemeinschaft) DFG HU1527/6-1, HU1527/10-1,			*
- *  HU1527/12-1 and HU1527/12-4													*
+ *  HU1527/12-1 and HU1527/12-4												*
  *                                                                          *
  * Portions copyright (c) 2017-2022 Technical University of Munich and		*
  * the authors' affiliations.												*
@@ -247,6 +247,202 @@ namespace SPH
 			ReduceDynamics<GetTimeStepSizeSquare> get_time_step_square_;
 			SimpleDynamics<UpdateParticlePosition> update_particle_position_;
 			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
+		};
+
+		/** Added by Bo for particle implicit relaxation and 0th and 1st consistency. */
+		template <typename ErrorDataType, typename ParameterADataType, typename ParameterCDataType>
+		struct ErrorAndParameters
+		{
+			ErrorDataType error_;
+			ParameterADataType a_;
+			ParameterCDataType c_;
+
+			ErrorAndParameters<ErrorDataType, ParameterADataType, ParameterCDataType>() : error_(ZeroData<ErrorDataType>::value),
+				                                                                          a_(ZeroData<ParameterADataType>::value),
+				                                                                          c_(ZeroData<ParameterCDataType>::value) {};
+		};
+
+		/**
+		 * @class RelaxationImplicitInner
+		 * @brief carry out particle relaxation by position implicit evolution.
+		 */
+		class RelaxationImplicitInner : public LocalDynamics, public RelaxDataDelegateInner
+		{
+		public:
+			explicit RelaxationImplicitInner(BaseInnerRelation& inner_relation);
+			virtual ~RelaxationImplicitInner() {};
+			void interaction(size_t index_i, Real dt = 0.0);
+
+		protected:
+			virtual ErrorAndParameters<Vecd, Matd, Matd> computeErrorAndParameters(size_t index_i, Real dt = 0.0);
+			virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters<Vecd, Matd, Matd>& error_and_parameters);
+
+			Kernel* kernel_;
+			StdLargeVec<Real>& Vol_;
+			StdLargeVec<Vecd>& pos_;
+			StdLargeVec<Real> residue_implicit_relaxation_;
+		};
+
+		/**
+		 * @class RelaxationImplicitInnerWithLevelSetCorrection
+		 * @brief we constrain particles to a level function representing the interface.
+		 */
+		class RelaxationImplicitInnerWithLevelSetCorrection : public RelaxationImplicitInner
+		{
+		public:
+			explicit RelaxationImplicitInnerWithLevelSetCorrection(BaseInnerRelation& inner_relation);
+			virtual ~RelaxationImplicitInnerWithLevelSetCorrection() {};
+
+		protected:
+			virtual ErrorAndParameters<Vecd, Matd, Matd> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override;
+
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+		};
+
+		/**
+		 * @class RelaxationEvolutionInner
+		 * @brief carry out the particle relaxation evolution within the body
+		 */
+		class RelaxationEvolutionInner : public BaseDynamics<void>
+		{
+		public:
+			explicit RelaxationEvolutionInner(BaseInnerRelation& inner_relation, bool level_set_correction = false);
+			virtual ~RelaxationEvolutionInner() {};
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface>& SurfaceBounding() { return surface_bounding_; };
+			virtual void exec(Real dt = 0.0) override;
+			virtual void parallel_exec(Real dt = 0.0) override;
+
+		protected:
+			bool level_set_correction_;
+			RealBody* real_body_;
+			BaseInnerRelation& inner_relation_;
+			NearShapeSurface near_shape_surface_;
+			UniquePtr<BaseDynamics<void>> relaxation_evolution_inner_;
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
+		};
+
+		/**
+		 * @class ZeroOrderConsistencyEvolution
+		 * @brief modify the particle volume to satisfy the zero order consistency. 
+		 */
+		class ZeroOrderConsistencyEvolution : public LocalDynamics, public RelaxDataDelegateInner
+		{
+		public:
+			ZeroOrderConsistencyEvolution(BaseInnerRelation& inner_relation, const std::string correction_matrix);
+			virtual ~ZeroOrderConsistencyEvolution() {};
+
+		protected:
+			virtual ErrorAndParameters<Vecd, Matd, Matd> computeErrorAndParameters(size_t index_i, Real dt = 0.0);
+			virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters<Vecd, Matd, Matd>& error_and_parameters);
+			void interaction(size_t index_i, Real dt = 0.0);
+
+			Kernel* kernel_;
+			StdLargeVec<Real>& Vol_;
+			StdLargeVec<Vecd>& pos_;
+			StdLargeVec<Matd>& B_;
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+			StdLargeVec<Real> residue_zero_order_consistency_;
+		};
+
+		class VolumetricMeasureConstrain : public LocalDynamics, public RelaxDataDelegateSimple
+		{
+		public:
+			VolumetricMeasureConstrain(SPHBody& sph_body);
+			virtual ~VolumetricMeasureConstrain() {};
+			void UpdateInitialAveragedParameter(Real initial_averaged_volume_measure);
+			void UpdateAveragedParameter(Real new_averaged_volume_measure);
+
+		protected:
+			Real initial_averaged_volume_measure_;
+			Real new_averaged_volume_measure_;
+			StdLargeVec<Real>& local_volume_measure_;
+			void update(size_t index_i, Real dt = 0.0);
+		};
+
+		/**
+		 * @class FirstOrderConsistencyEvolution
+		 * @brief modify the B matrix to satisfy the first order consistency.
+		 */
+		class FirstOrderConsistencyEvolution : public LocalDynamics, public RelaxDataDelegateInner
+		{
+		public:
+			FirstOrderConsistencyEvolution(BaseInnerRelation& inner_relation, const std::string correction_matrix);
+			virtual ~FirstOrderConsistencyEvolution() {};
+
+		protected:
+			virtual ErrorAndParameters<Matd, Matd, Matd> computeErrorAndParameters(size_t index_i, Real dt = 0.0);
+			virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters<Matd, Matd, Matd>& error_and_parameters);
+			void interaction(size_t index_i, Real dt = 0.0);
+
+			Kernel* kernel_;
+			StdLargeVec<Real>& Vol_;
+			StdLargeVec<Vecd>& pos_;
+			StdLargeVec<Matd>& B_;
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+			StdLargeVec<Real> residue_first_order_consistency_;
+		};
+
+		/**
+		 * @class ModificationStepForConsistency
+		 * @brief modify the volume and B matrix for 0 order and 1 order consistency.
+		 */
+		class ModificationStepForConsistency : public BaseDynamics<void>, GeneralDataDelegateInner
+		{
+		public:
+			ModificationStepForConsistency(BaseInnerRelation& inner_relation);
+			virtual ~ModificationStepForConsistency() {};
+			virtual void exec(Real dt = 0) override;
+			virtual void parallel_exec(Real dt = 0) override;
+
+		protected:
+			StdLargeVec<Real> Vol_;
+			StdLargeVec<Matd> B_;
+			UniquePtr<BaseDynamics<void>> zero_order_consistency_evolution;
+			ReduceAverage<QuantitySummation<Real>> total_averaged_volume_measure;
+			SimpleDynamics<VolumetricMeasureConstrain> volume_measure_constrain;
+			UniquePtr<BaseDynamics<void>> first_order_consistency_evolution;
+		};
+
+		/**
+		 * @class UpdateParticleKineticEnergy
+		 * @brief calculate the particle kinetic energy
+		 */
+		class UpdateParticleKineticEnergy : public LocalDynamics, public GeneralDataDelegateInner
+		{
+		public:
+			UpdateParticleKineticEnergy(BaseInnerRelation& inner_relation);
+			virtual ~UpdateParticleKineticEnergy() {};
+			void interaction(size_t index_i, Real dt);
+
+		protected:
+			StdLargeVec<Vecd>& acc_, &pos_;
+			StdLargeVec<Real>& mass_;
+			StdLargeVec<Real> particle_kinetic_energy;
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+		};
+
+		/**
+		 * @class CheckZeroOrderConsistency
+		 * @breif calculate the zero order consistency from kernel
+		 */
+		class CheckZeroOrderConsistency : public LocalDynamics, public GeneralDataDelegateInner
+		{
+		public:
+			CheckZeroOrderConsistency(BaseInnerRelation& inner_relation);
+			virtual ~CheckZeroOrderConsistency() {};
+			void interaction(size_t index_i, Real dt);
+
+		protected:
+			Real W0_;
+			StdLargeVec<Real>& Vol_;
+			StdLargeVec<Vecd>& pos_;
+			StdLargeVec<Real> unit_zero_order_;
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
 		};
 
 		/**
