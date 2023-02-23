@@ -72,24 +72,19 @@ namespace SPH
     template <int DIMENSION>
     struct VecXHelper
     {
-        std::array<Real, XsimdSize> temp_[DIMENSION];
-
-        inline void assign(Eigen::Matrix<Real, DIMENSION, 1> *input,
-                           size_t *index_shift, Eigen::Matrix<RealX, DIMENSION, 1> &output)
+        Eigen::Matrix<Real, DIMENSION, XsimdSize> temp_;
+ 
+         inline void assign(Eigen::Matrix<Real, DIMENSION, 1> *input, Eigen::Matrix<RealX, DIMENSION, 1> &output)
         {
 
-            for (size_t j = 0; j != XsimdSize; ++j)
+            for (size_t i = 0; i != XsimdSize; ++i)
             {
-                Eigen::Matrix<Real, DIMENSION, 1> &eigen_vector = *(input + *(index_shift + j));
-                for (size_t i = 0; i != DIMENSION; ++i)
-                {
-                    temp_[i][j] = eigen_vector[i];
-                }
+                temp_.col(i) = *(input + i);
             }
 
             for (size_t i = 0; i != DIMENSION; ++i)
             {
-                output[i] = xsimd::load_aligned(&temp_[i][0]);
+                output[i] = xsimd::load_unaligned(&temp_.row(i)[0]);
             }
         };
 
