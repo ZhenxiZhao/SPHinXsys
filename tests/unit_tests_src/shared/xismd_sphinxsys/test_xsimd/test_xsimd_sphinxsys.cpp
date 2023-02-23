@@ -33,31 +33,38 @@ TEST(test_XsimdScalar, test_BasicOperations)
 	EXPECT_EQ(165.0, sum);
 }
 
-TEST(test_XsimdVecd, test_SimpleOperations)
+TEST(test_XsimdVecd, test_VecdOperations)
 {
-	StdLargeVec<Vec2d> a, b;
-	a.resize(vec_size, Vec2d(1.0, 1.0));
-	b.resize(vec_size, Vec2d(2.0, 2.0));
+	StdLargeVec<Vec3d> a, b;
+	a.resize(vec_size, Vec3d(1.0, 1.0, 1.0));
+	b.resize(vec_size, Vec3d(2.0, 2.0, 2.0));
 
-	Vec2X x_sum = Vec2X::Zero();
-	Vec2XHelper helper;
-	Vec2X ba, bb;
+	StdLargeVec<size_t> index_shift;
+	index_shift.resize(10, 0);
+	for (size_t i = 0; i < index_shift.size(); ++i)
+	{
+		index_shift[i] = i;
+	}
+
+	Vec3X x_sum = Vec3X::Zero();
+	Vec3XHelper helper;
+	Vec3X ba, bb;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		helper.assign(&a[i], ba);
-		helper.assign(&b[i], bb);
+		helper.assign(&a[i], &index_shift[0], ba);
+		helper.assign(&b[i], &index_shift[0], bb);
 		x_sum += (ba + bb) / 2.0;
 	}
 
-	Vec2d sum = Vec2d::Zero();
+	Vec3d sum = Vec3d::Zero();
 	helper.reduce(x_sum, sum);
 	for (size_t i = floored_vec_size; i < vec_size; ++i)
 	{
 		sum += (a[i] + b[i]) / 2.0;
 	}
 
-	EXPECT_EQ(Vec2d(165.0, 165.0), sum);
+	EXPECT_EQ(Vec3d(165.0, 165.0, 165.0), sum);
 }
 
 int main(int argc, char *argv[])
