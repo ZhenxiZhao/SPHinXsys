@@ -32,7 +32,6 @@
 #include <base_data_package.h>
 
 #include <include/xsimd/xsimd.hpp>
-#define EIGEN_DONT_VECTORIZE
 
 namespace SPH
 {
@@ -66,9 +65,41 @@ namespace Eigen
 
 namespace SPH
 {
-    /** Vector with float point number in batches.*/
+    /** Vector with float point number.*/
     using Vec2X = Eigen::Matrix<RealX, 2, 1>;
     using Vec3X = Eigen::Matrix<RealX, 3, 1>;
+
+    template <int DIMENSION>
+    struct VecXHelper
+    {
+        Eigen::Matrix<Real, DIMENSION, XsimdSize> temp_;
+ 
+         inline void assign(Eigen::Matrix<Real, DIMENSION, 1> *input, Eigen::Matrix<RealX, DIMENSION, 1> &output)
+        {
+
+            for (size_t i = 0; i != XsimdSize; ++i)
+            {
+                temp_.col(i) = *(input + i);
+            }
+
+            for (size_t i = 0; i != DIMENSION; ++i)
+            {
+                output[i] = xsimd::load_unaligned(&temp_.row(i)[0]);
+            }
+        };
+
+        inline void reduce(const Eigen::Matrix<RealX, DIMENSION, 1> &input, Eigen::Matrix<Real, DIMENSION, 1> &output)
+        {
+
+            for (size_t i = 0; i != DIMENSION; ++i)
+            {
+                output[i] = xsimd::reduce_add(input[i]);
+            }
+        };
+    };
+    using Vec2XHelper = VecXHelper<2>;
+    using Vec3XHelper = VecXHelper<3>;
+
     /** Small, 2*2 and 3*3, matrix with float point number in batches. */
     using Mat2X = Eigen::Matrix<RealX, 2, 2>;
     using Mat3X = Eigen::Matrix<RealX, 3, 3>;
