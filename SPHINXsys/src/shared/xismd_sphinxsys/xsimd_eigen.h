@@ -68,45 +68,49 @@ namespace SPH
     /** Vector with float point number.*/
     using Vec2X = Eigen::Matrix<RealX, 2, 1>;
     using Vec3X = Eigen::Matrix<RealX, 3, 1>;
-
-    template <int DIMENSION>
-    struct VecXHelper
+    /** Small, 2*2 and 3*3, matrix with float point number in batches. */
+    using Mat2X = Eigen::Matrix<RealX, 2, 2>;
+    using Mat3X = Eigen::Matrix<RealX, 3, 3>;
+    template <int NRow, int NCol>
+    struct MatXHelper
     {
-        Eigen::Matrix<Real, DIMENSION, XsimdSize> temp_;
-        Eigen::Matrix<Real, XsimdSize, DIMENSION> temp_transpose_;
+        constexpr static int MatSize = NRow * NCol;
+        Eigen::Matrix<Real, MatSize, XsimdSize> temp_;
+        Eigen::Matrix<Real, XsimdSize, MatSize> temp_transpose_;
 
-        inline void assign(Eigen::Matrix<Real, DIMENSION, 1> *input,
-                           size_t *index_shift, Eigen::Matrix<RealX, DIMENSION, 1> &output)
+        inline void assign(Eigen::Matrix<Real, NRow, NCol> *input,
+                           size_t *index_shift, Eigen::Matrix<RealX, NRow, NCol> &output)
         {
 
             for (size_t i = 0; i != XsimdSize; ++i)
             {
-                temp_.col(i) = *(input + *(index_shift + i));
+                Eigen::Matrix<Real, NRow, NCol> &eigen_vector = *(input + *(index_shift + i));
+                temp_.col(i) =  Eigen::Map<Eigen::Matrix<Real, MatSize, 1>>(eigen_vector.data(), eigen_vector.size());
             }
 
             temp_transpose_ = temp_.transpose();
-            for (size_t i = 0; i != DIMENSION; ++i)
-            {
-                output[i] = xsimd::load_aligned(&temp_transpose_.col(i)[0]);
-            }
+            for (size_t i = 0; i != NRow; ++i)
+                for (size_t j = 0; j != NCol; ++j)
+                {
+                    output(i, j) = xsimd::load_aligned(&temp_transpose_.col(j * NRow + i)[0]);
+                }
         };
 
-        inline void reduce(const Eigen::Matrix<RealX, DIMENSION, 1> &input,
-                           Eigen::Matrix<Real, DIMENSION, 1> &output)
+        inline void reduce(const Eigen::Matrix<RealX, NRow, NCol> &input,
+                           Eigen::Matrix<Real, NRow, NCol> &output)
         {
 
-            for (size_t i = 0; i != DIMENSION; ++i)
-            {
-                output[i] = xsimd::reduce_add(input[i]);
-            }
+            for (size_t i = 0; i != NRow; ++i)
+                for (size_t j = 0; j != NCol; ++j)
+                {
+                    output(i, j) = xsimd::reduce_add(input(i, j));
+                }
         };
     };
-    using Vec2XHelper = VecXHelper<2>;
-    using Vec3XHelper = VecXHelper<3>;
-
-    /** Small, 2*2 and 3*3, matrix with float point number in batches. */
-    using Mat2X = Eigen::Matrix<RealX, 2, 2>;
-    using Mat3X = Eigen::Matrix<RealX, 3, 3>;
+    using Vec2XHelper = MatXHelper<2, 1>;
+    using Vec3XHelper = MatXHelper<3, 1>;
+    using Mat2XHelper = MatXHelper<2, 2>;
+    using Mat3XHelper = MatXHelper<3, 3>;
 }
 
 #endif // XSIMD_EIGEN_H
