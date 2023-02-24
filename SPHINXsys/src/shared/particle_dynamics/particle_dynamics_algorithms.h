@@ -337,6 +337,25 @@ namespace SPH
 				this->post_processes_[k]->parallel_exec(dt);
 		}
 
+		//----------------------------------------------------------------------
+		//	Experimental: parallel and SIMD functions for executing.
+		//----------------------------------------------------------------------
+		template<typename ExecutionPolicy>
+		void par_simd_runInteractionStep(Real dt)
+		{
+			particle_parallel_for(this->identifier_.LoopRange(),
+								  [&](size_t i)
+								  { this->interaction_simd(i, dt); });
+		}
+
+		template<typename ExecutionPolicy>
+		void par_simd_exec(Real dt = 0.0)
+		{
+			this->setUpdated();
+			this->setupDynamics(dt);
+			par_simd_runInteractionStep<ExecutionPolicy>(dt);
+		};
+
 	protected:
 		template <class BodyRelationType, typename... Args>
 		InteractionDynamics(bool mostDerived, BodyRelationType &body_relation, Args &&...args)
