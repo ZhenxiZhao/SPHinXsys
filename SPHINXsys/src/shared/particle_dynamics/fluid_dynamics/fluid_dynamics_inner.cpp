@@ -1,5 +1,6 @@
 #include "fluid_dynamics_inner.h"
 #include "fluid_dynamics_inner.hpp"
+#include "xsimd_eigen.h"
 
 namespace SPH
 {
@@ -24,14 +25,33 @@ namespace SPH
 		//=================================================================================================//
 		DensitySummationInner::DensitySummationInner(BaseInnerRelation &inner_relation)
 			: BaseDensitySummationInner(inner_relation),
-			  W0_(sph_body_.sph_adaptation_->getKernel()->W0( ZeroVecd )),
+			  W0_(sph_body_.sph_adaptation_->getKernel()->W0(ZeroVecd)),
 			  inv_sigma0_(1.0 / sph_body_.sph_adaptation_->ReferenceNumberDensity()) {}
 		//=================================================================================================//
-		void DensitySummationInner::interaction(size_t index_i, Real dt)
+		void DensitySummationInner::interaction_simd(size_t index_i, Real dt)
 		{
 			Real sigma = W0_;
 			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
 			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
+				sigma += inner_neighborhood.W_ij_[n];
+
+			rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
+		}
+		//=================================================================================================//
+		void DensitySummationInner::interaction(size_t index_i, Real dt)
+		{
+			Neighborhood &inner_neighborhood = inner_configuration_[index_i];
+
+			RealX x_sigma(0.0);
+			RealXHelper helper;
+			size_t floored_current_size = inner_neighborhood.current_size_ - inner_neighborhood.current_size_ % XsimdSize;
+			for (size_t n = 0; n < floored_current_size; n += XsimdSize)
+			{
+				x_sigma += helper.load(&inner_neighborhood.W_ij_[n]);
+			}
+
+			Real sigma = W0_ + helper.reduce(x_sigma);
+			for (size_t n = floored_current_size; n != inner_neighborhood.current_size_; ++n)
 				sigma += inner_neighborhood.W_ij_[n];
 
 			rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
@@ -46,7 +66,7 @@ namespace SPH
 		//=================================================================================================//
 		void DensitySummationInnerAdaptive::interaction(size_t index_i, Real dt)
 		{
-			Real sigma_i = mass_[index_i] * kernel_.W0( h_ratio_[index_i], ZeroVecd );
+			Real sigma_i = mass_[index_i] * kernel_.W0(h_ratio_[index_i], ZeroVecd);
 			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
 			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
 				sigma_i += inner_neighborhood.W_ij_[n] * mass_[inner_neighborhood.j_[n]];
@@ -216,7 +236,6 @@ namespace SPH
 
 				Vecd vel_diff = vel_[index_i] - vel_[index_j];
 				vorticity += getCrossProduct(vel_diff, inner_neighborhood.e_ij_[n]) * inner_neighborhood.dW_ijV_j_[n];
-
 			}
 
 			vorticity_[index_i] = vorticity;
@@ -283,7 +302,7 @@ namespace SPH
 				size_t index_j = inner_neighborhood.j_[n];
 				Vecd nablaW_ijV_j = inner_neighborhood.dW_ijV_j_[n] * inner_neighborhood.e_ij_[n];
 
-				Matd velocity_gradient = - (vel_[index_i] - vel_[index_j]) * nablaW_ijV_j.transpose();
+				Matd velocity_gradient = -(vel_[index_i] - vel_[index_j]) * nablaW_ijV_j.transpose();
 				stress_rate += velocity_gradient.transpose() * tau_i + tau_i * velocity_gradient - tau_i / lambda_ +
 							   (velocity_gradient.transpose() + velocity_gradient) * mu_p_ / lambda_;
 			}

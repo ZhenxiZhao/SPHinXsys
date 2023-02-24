@@ -88,6 +88,7 @@ namespace SPH
 			explicit DensitySummationInner(BaseInnerRelation &inner_relation);
 			virtual ~DensitySummationInner(){};
 			void interaction(size_t index_i, Real dt = 0.0);
+			void interaction_simd(size_t index_i, Real dt = 0.0);
 
 		protected:
 			Real W0_, inv_sigma0_;

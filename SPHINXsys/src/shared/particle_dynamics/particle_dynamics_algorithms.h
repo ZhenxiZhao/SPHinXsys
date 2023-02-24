@@ -341,7 +341,7 @@ namespace SPH
 		//	Experimental: parallel and SIMD functions for executing.
 		//----------------------------------------------------------------------
 		template<typename ExecutionPolicy>
-		void par_simd_runInteractionStep(Real dt)
+		void par_simd_runInteractionStep(ExecutionPolicy policy, Real dt)
 		{
 			particle_parallel_for(this->identifier_.LoopRange(),
 								  [&](size_t i)
@@ -349,11 +349,11 @@ namespace SPH
 		}
 
 		template<typename ExecutionPolicy>
-		void par_simd_exec(Real dt = 0.0)
+		void par_simd_exec(ExecutionPolicy policy, Real dt = 0.0)
 		{
 			this->setUpdated();
 			this->setupDynamics(dt);
-			par_simd_runInteractionStep<ExecutionPolicy>(dt);
+			par_simd_runInteractionStep(policy, dt);
 		};
 
 	protected:
