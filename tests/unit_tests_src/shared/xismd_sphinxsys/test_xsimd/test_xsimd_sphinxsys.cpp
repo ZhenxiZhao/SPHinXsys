@@ -16,15 +16,24 @@ TEST(test_XsimdScalar, test_BasicOperations)
 	a.resize(vec_size, 1.0);
 	b.resize(vec_size, 2.0);
 
+	StdLargeVec<size_t> indexes;
+	indexes.resize(vec_size, 0);
+	for (size_t i = 0; i < indexes.size(); ++i)
+	{
+		indexes[i] = i;
+	}
+
 	RealX x_sum(0.0);
+	RealXHelper helper;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		RealX ba = xs::load_aligned(&a[i]);
-		RealX bb = xs::load_aligned(&b[i]);
+		RealX ba = helper.load(&a[i]);
+		RealX bb = helper.gather(b, &indexes[i]);
 		x_sum += (ba + bb) / 2.0;
 	}
-	Real sum = xs::reduce_add(x_sum);
+
+	Real sum = helper.reduce(x_sum);
 	for (size_t i = floored_vec_size; i < vec_size; ++i)
 	{
 		sum += (a[i] + b[i]) / 2.0;

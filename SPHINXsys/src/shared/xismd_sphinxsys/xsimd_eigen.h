@@ -37,36 +37,36 @@ namespace SPH
 {
     constexpr size_t XsimdSize = xsimd::simd_type<Real>::size;
     using RealX = xsimd::batch<Real, xsimd::default_arch>;
-    using intX = xsimd::batch<int, xsimd::default_arch>;
-    template <typename T, typename TX>
-    class ScalarHelper
+    class RealXHelper
     {
-        StdLargeVec<T> temp_;
+        StdLargeVec<Real> temp_;
 
     public:
-        ScalarHelper() : temp_(XsimdSize){};
+        RealXHelper() : temp_(XsimdSize){};
 
-        inline TX load(T *input)
+        inline RealX load(Real *input)
         {
             return xsimd::load_aligned(input);
         }
 
-        inline TX gather(StdLargeVec<T> &input, size_t *index)
+        inline RealX gather(StdLargeVec<Real> &input, size_t *index)
         {
             for (size_t i = 0; i != XsimdSize; ++i)
             {
                 temp_[i] = input[*(index + i)];
             }
-            return xsimd::load_aligned(temp_);
+            return xsimd::load_aligned(&temp_[0]);
+        }
+
+        inline Real reduce(const RealX &input)
+        {
+            return xsimd::reduce_add(input);
         }
     };
-    using RealXHelper = ScalarHelper<Real, RealX>;
-    using IntegerXHelper = ScalarHelper<int, intX>;
 }
 
 namespace Eigen
 {
-
     template <>
     struct NumTraits<SPH::RealX>
         : GenericNumTraits<SPH::RealX>
