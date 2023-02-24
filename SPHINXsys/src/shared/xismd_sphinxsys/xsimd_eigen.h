@@ -35,8 +35,33 @@
 
 namespace SPH
 {
-    using RealX = xsimd::batch<Real, xsimd::default_arch>;
     constexpr size_t XsimdSize = xsimd::simd_type<Real>::size;
+    using RealX = xsimd::batch<Real, xsimd::default_arch>;
+    using intX = xsimd::batch<int, xsimd::default_arch>;
+    template <typename T, typename TX>
+    class ScalarHelper
+    {
+        StdLargeVec<T> temp_;
+
+    public:
+        ScalarHelper() : temp_(XsimdSize){};
+
+        inline TX load(T *input)
+        {
+            return xsimd::load_aligned(input);
+        }
+
+        inline TX gather(StdLargeVec<T> &input, size_t *index)
+        {
+            for (size_t i = 0; i != XsimdSize; ++i)
+            {
+                temp_[i] = input[*(index + i)];
+            }
+            return xsimd::load_aligned(temp_);
+        }
+    };
+    using RealXHelper = ScalarHelper<Real, RealX>;
+    using IntegerXHelper = ScalarHelper<int, intX>;
 }
 
 namespace Eigen
@@ -66,28 +91,55 @@ namespace Eigen
 namespace SPH
 {
     /** Vector with float point number.*/
-    using Vec2X = Eigen::Matrix<RealX, 2, 1>;
-    using Vec3X = Eigen::Matrix<RealX, 3, 1>;
+    using Vec2dX = Eigen::Matrix<RealX, 2, 1>;
+    using Vec3dX = Eigen::Matrix<RealX, 3, 1>;
     /** Small, 2*2 and 3*3, matrix with float point number in batches. */
-    using Mat2X = Eigen::Matrix<RealX, 2, 2>;
-    using Mat3X = Eigen::Matrix<RealX, 3, 3>;
+    using Mat2dX = Eigen::Matrix<RealX, 2, 2>;
+    using Mat3dX = Eigen::Matrix<RealX, 3, 3>;
     template <int NRow, int NCol>
-    struct MatXHelper
+    class MatXHelper
     {
         constexpr static int MatSize = NRow * NCol;
         Eigen::Matrix<Real, MatSize, XsimdSize> temp_;
         Eigen::Matrix<Real, XsimdSize, MatSize> temp_transpose_;
 
-        inline void assign(Eigen::Matrix<Real, NRow, NCol> *input,
-                           size_t *index_shift, Eigen::Matrix<RealX, NRow, NCol> &output)
-        {
+    public:
+        MatXHelper(){};
 
+        inline void load(Eigen::Matrix<Real, NRow, NCol> *input, Eigen::Matrix<RealX, NRow, NCol> &output)
+        {
             for (size_t i = 0; i != XsimdSize; ++i)
             {
-                Eigen::Matrix<Real, NRow, NCol> &eigen_vector = *(input + *(index_shift + i));
-                temp_.col(i) =  Eigen::Map<Eigen::Matrix<Real, MatSize, 1>>(eigen_vector.data(), eigen_vector.size());
+                Eigen::Matrix<Real, NRow, NCol> &eigen_vector = *(input + i);
+                temp_.col(i) = Eigen::Map<Eigen::Matrix<Real, MatSize, 1>>(eigen_vector.data(), eigen_vector.size());
             }
+            assign(output);
+        };
 
+        inline void gather(StdLargeVec<Eigen::Matrix<Real, NRow, NCol>> &input,
+                           size_t *index, Eigen::Matrix<RealX, NRow, NCol> &output)
+        {
+            for (size_t i = 0; i != XsimdSize; ++i)
+            {
+                Eigen::Matrix<Real, NRow, NCol> &eigen_vector = input[*(index + i)];
+                temp_.col(i) = Eigen::Map<Eigen::Matrix<Real, MatSize, 1>>(eigen_vector.data(), eigen_vector.size());
+            }
+            assign(output);
+        };
+
+        inline void reduce(const Eigen::Matrix<RealX, NRow, NCol> &input,
+                           Eigen::Matrix<Real, NRow, NCol> &output)
+        {
+            for (size_t i = 0; i != NRow; ++i)
+                for (size_t j = 0; j != NCol; ++j)
+                {
+                    output(i, j) = xsimd::reduce_add(input(i, j));
+                }
+        };
+
+    private:
+        inline void assign(Eigen::Matrix<RealX, NRow, NCol> &output)
+        {
             temp_transpose_ = temp_.transpose();
             for (size_t i = 0; i != NRow; ++i)
                 for (size_t j = 0; j != NCol; ++j)
@@ -95,22 +147,11 @@ namespace SPH
                     output(i, j) = xsimd::load_aligned(&temp_transpose_.col(j * NRow + i)[0]);
                 }
         };
-
-        inline void reduce(const Eigen::Matrix<RealX, NRow, NCol> &input,
-                           Eigen::Matrix<Real, NRow, NCol> &output)
-        {
-
-            for (size_t i = 0; i != NRow; ++i)
-                for (size_t j = 0; j != NCol; ++j)
-                {
-                    output(i, j) = xsimd::reduce_add(input(i, j));
-                }
-        };
     };
-    using Vec2XHelper = MatXHelper<2, 1>;
-    using Vec3XHelper = MatXHelper<3, 1>;
-    using Mat2XHelper = MatXHelper<2, 2>;
-    using Mat3XHelper = MatXHelper<3, 3>;
+    using Vec2dXHelper = MatXHelper<2, 1>;
+    using Vec3dXHelper = MatXHelper<3, 1>;
+    using Mat2dXHelper = MatXHelper<2, 2>;
+    using Mat3dXHelper = MatXHelper<3, 3>;
 }
 
 #endif // XSIMD_EIGEN_H

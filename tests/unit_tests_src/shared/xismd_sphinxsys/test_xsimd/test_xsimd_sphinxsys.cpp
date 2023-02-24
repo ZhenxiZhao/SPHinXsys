@@ -39,21 +39,21 @@ TEST(test_XsimdVecd, test_VecdOperations)
 	a.resize(vec_size, Vec3d(1.0, 1.0, 1.0));
 	b.resize(vec_size, Vec3d(2.0, 2.0, 2.0));
 
-	StdLargeVec<size_t> index_shift;
-	index_shift.resize(10, 0);
-	for (size_t i = 0; i < index_shift.size(); ++i)
+	StdLargeVec<size_t> indexes;
+	indexes.resize(vec_size, 0);
+	for (size_t i = 0; i < indexes.size(); ++i)
 	{
-		index_shift[i] = i;
+		indexes[i] = i;
 	}
 
-	Vec3X x_sum = Vec3X::Zero();
-	Vec3XHelper helper;
-	Vec3X ba, bb;
+	Vec3dX x_sum = Vec3dX::Zero();
+	Vec3dXHelper helper;
+	Vec3dX ba, bb;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		helper.assign(&a[i], &index_shift[0], ba);
-		helper.assign(&b[i], &index_shift[0], bb);
+		helper.gather(a, &indexes[i], ba);
+		helper.gather(b, &indexes[i], bb);
 		x_sum += (ba + bb) / 2.0;
 	}
 
@@ -73,21 +73,21 @@ TEST(test_XsimdMatd, test_MatdOperations)
 	a.resize(vec_size, Mat2d{{1.0, 1.0}, {1.0, 1.0}});
 	b.resize(vec_size, Mat2d{{2.0, 2.0}, {2.0, 2.0}});
 
-	StdLargeVec<size_t> index_shift;
-	index_shift.resize(10, 0);
-	for (size_t i = 0; i < index_shift.size(); ++i)
+	StdLargeVec<size_t> indexes;
+	indexes.resize(vec_size, 0);
+	for (size_t i = 0; i < indexes.size(); ++i)
 	{
-		index_shift[i] = i;
+		indexes[i] = i;
 	}
 
-	Mat2X x_sum = Mat2X::Zero();
-	Mat2XHelper helper;
-	Mat2X ba, bb;
+	Mat2dX x_sum = Mat2dX::Zero();
+	Mat2dXHelper helper;
+	Mat2dX ba, bb;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		helper.assign(&a[i], &index_shift[0], ba);
-		helper.assign(&b[i], &index_shift[0], bb);
+		helper.gather(a, &indexes[i], ba);
+		helper.gather(b, &indexes[i], bb);
 		x_sum += (ba + bb) / 2.0;
 	}
 
