@@ -30,6 +30,7 @@
 
 #include "base_data_type.h"
 #include "vector_functions.h"
+#include "xsimd_eigen.h"
 
 namespace SPH {
 	using Veci = Vec3i;
@@ -40,6 +41,9 @@ namespace SPH {
 	using AngularVecd = Vec3d;
 	using Transformd = Transform3d;
 	using SimTKVecd = SimTK::Vec3;
+
+	using VecdX = Vec3dX;
+	using MatdX = Mat3dX;
 
 	using  BoundingBox = BaseBoundingBox<Vec3d>;
 

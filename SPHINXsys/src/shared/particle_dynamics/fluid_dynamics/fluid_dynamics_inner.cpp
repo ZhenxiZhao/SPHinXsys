@@ -1,6 +1,5 @@
 #include "fluid_dynamics_inner.h"
 #include "fluid_dynamics_inner.hpp"
-#include "xsimd_eigen.h"
 
 namespace SPH
 {
