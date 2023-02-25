@@ -37,32 +37,31 @@ namespace SPH
 {
     constexpr size_t XsimdSize = xsimd::simd_type<Real>::size;
     using RealX = xsimd::batch<Real, xsimd::default_arch>;
-    class RealXHelper
+
+    inline RealX loadRealX(Real *input)
     {
-        StdLargeVec<Real> temp_;
+        return xsimd::load_aligned(input);
+    }
 
-    public:
-        RealXHelper() : temp_(XsimdSize){};
+    template <int XSIMD_SIZE>
+    RealX gatherRealX(StdLargeVec<Real> &input, size_t *index)
+    {
+        std::cout << "\n Error: getherRealX is not defined for the native architecture !" << std::endl;
+        std::cout << __FILE__ << ':' << __LINE__ << std::endl;
+        exit(1);
+        return RealX();
+    }
 
-        inline RealX load(Real *input)
-        {
-            return xsimd::load_aligned(input);
-        }
+    template <>
+    inline RealX gatherRealX<4>(StdLargeVec<Real> &input, size_t *index)
+    {
+        return RealX(input[*index], input[*(index + 1)], input[*(index + 2)], input[*(index + 3)]);
+    }
 
-        inline RealX gather(StdLargeVec<Real> &input, size_t *index)
-        {
-            for (size_t i = 0; i != XsimdSize; ++i)
-            {
-                temp_[i] = input[*(index + i)];
-            }
-            return xsimd::load_aligned(&temp_[0]);
-        }
-
-        inline Real reduce(const RealX &input)
-        {
-            return xsimd::reduce_add(input);
-        }
-    };
+    inline Real reduceRealX(const RealX &input)
+    {
+        return xsimd::reduce_add(input);
+    }
 }
 
 namespace Eigen
@@ -96,62 +95,148 @@ namespace SPH
     /** Small, 2*2 and 3*3, matrix with float point number in batches. */
     using Mat2dX = Eigen::Matrix<RealX, 2, 2>;
     using Mat3dX = Eigen::Matrix<RealX, 3, 3>;
-    template <int NRow, int NCol>
-    class MatXHelper
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    std::array<std::array<Real, XSIMD_SIZE>, DIMENSION> gatherTemporary(StdLargeVec<Eigen::Matrix<Real, DIMENSION, 1>> &input, size_t *index);
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    Eigen::Matrix<RealX, DIMENSION, 1> loadVecdX(Eigen::Matrix<Real, DIMENSION, 1> *input)
     {
-        constexpr static int MatSize = NRow * NCol;
-        Eigen::Matrix<Real, MatSize, XsimdSize> temp_;
-        Eigen::Matrix<Real, XsimdSize, MatSize> temp_transpose_;
+        std::cout << "\n Error: loadVecdX is not defined for the native architecture !" << std::endl;
+        std::cout << __FILE__ << ':' << __LINE__ << std::endl;
+        exit(1);
+        return Eigen::Matrix<RealX, DIMENSION, 1>();
+    }
 
-    public:
-        MatXHelper(){};
+    template <>
+    inline Vec2dX loadVecdX<4>(Vec2d *input)
+    {
+        return Vec2dX(RealX((*input)[0], (*(input + 1))[0], (*(input + 2))[0], (*(input + 3))[0]),
+                      RealX((*input)[1], (*(input + 1))[1], (*(input + 2))[1], (*(input + 3))[1]));
+    }
 
-        inline void load(Eigen::Matrix<Real, NRow, NCol> *input, Eigen::Matrix<RealX, NRow, NCol> &output)
-        {
-            for (size_t i = 0; i != XsimdSize; ++i)
-            {
-                Eigen::Matrix<Real, NRow, NCol> &eigen_vector = *(input + i);
-                temp_.col(i) = Eigen::Map<Eigen::Matrix<Real, MatSize, 1>>(eigen_vector.data(), eigen_vector.size());
-            }
-            assign(output);
-        };
+    template <>
+    inline Vec3dX loadVecdX<4>(Vec3d *input)
+    {
+        return Vec3dX(RealX((*input)[0], (*(input + 1))[0], (*(input + 2))[0], (*(input + 3))[0]),
+                      RealX((*input)[1], (*(input + 1))[1], (*(input + 2))[1], (*(input + 3))[1]),
+                      RealX((*input)[2], (*(input + 1))[2], (*(input + 2))[2], (*(input + 3))[2]));
+    }
 
-        inline void gather(StdLargeVec<Eigen::Matrix<Real, NRow, NCol>> &input,
-                           size_t *index, Eigen::Matrix<RealX, NRow, NCol> &output)
-        {
-            for (size_t i = 0; i != XsimdSize; ++i)
-            {
-                Eigen::Matrix<Real, NRow, NCol> &eigen_vector = input[*(index + i)];
-                temp_.col(i) = Eigen::Map<Eigen::Matrix<Real, MatSize, 1>>(eigen_vector.data(), eigen_vector.size());
-            }
-            assign(output);
-        };
+    template <int XSIMD_SIZE, int DIMENSION>
+    Eigen::Matrix<RealX, DIMENSION, 1> gatherVecdX(StdLargeVec<Eigen::Matrix<Real, DIMENSION, 1>> &input, size_t *index)
+    {
+        std::cout << "\n Error: gatherVecdX is not defined for the native architecture !" << std::endl;
+        std::cout << __FILE__ << ':' << __LINE__ << std::endl;
+        exit(1);
+        return Eigen::Matrix<RealX, DIMENSION, 1>();
+    }
 
-        inline void reduce(const Eigen::Matrix<RealX, NRow, NCol> &input,
-                           Eigen::Matrix<Real, NRow, NCol> &output)
-        {
-            for (size_t i = 0; i != NRow; ++i)
-                for (size_t j = 0; j != NCol; ++j)
-                {
-                    output(i, j) = xsimd::reduce_add(input(i, j));
-                }
-        };
+    template <>
+    inline Vec2dX gatherVecdX<4>(StdLargeVec<Vec2d> &input, size_t *index)
+    {
+        return Vec2dX(RealX(input[*index][0], input[*(index + 1)][0], input[*(index + 2)][0], input[*(index + 3)][0]),
+                      RealX(input[*index][1], input[*(index + 1)][1], input[*(index + 2)][1], input[*(index + 3)][1]));
+    }
 
-    private:
-        inline void assign(Eigen::Matrix<RealX, NRow, NCol> &output)
-        {
-            temp_transpose_ = temp_.transpose();
-            for (size_t i = 0; i != NRow; ++i)
-                for (size_t j = 0; j != NCol; ++j)
-                {
-                    output(i, j) = xsimd::load_aligned(&temp_transpose_.col(j * NRow + i)[0]);
-                }
-        };
-    };
-    using Vec2dXHelper = MatXHelper<2, 1>;
-    using Vec3dXHelper = MatXHelper<3, 1>;
-    using Mat2dXHelper = MatXHelper<2, 2>;
-    using Mat3dXHelper = MatXHelper<3, 3>;
+    template <>
+    inline Vec3dX gatherVecdX<4>(StdLargeVec<Vec3d> &input, size_t *index)
+    {
+        return Vec3dX(RealX(input[*index][0], input[*(index + 1)][0], input[*(index + 2)][0], input[*(index + 3)][0]),
+                      RealX(input[*index][1], input[*(index + 1)][1], input[*(index + 2)][1], input[*(index + 3)][1]),
+                      RealX(input[*index][2], input[*(index + 1)][2], input[*(index + 2)][2], input[*(index + 3)][2]));
+    }
+
+    inline Vec2d reduceVecdX(const Vec2dX &input)
+    {
+        return Vec2d(xsimd::reduce_add(input[0]), xsimd::reduce_add(input[1]));
+    }
+
+    inline Vec3d reduceVecdX(const Vec3dX &input)
+    {
+        return Vec3d(xsimd::reduce_add(input[0]), xsimd::reduce_add(input[1]), xsimd::reduce_add(input[2]));
+    }
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    Eigen::Matrix<RealX, DIMENSION, DIMENSION> loadMatdX(Eigen::Matrix<Real, DIMENSION, DIMENSION> *input)
+    {
+        std::cout << "\n Error: loadMatdX is not defined for the native architecture !" << std::endl;
+        std::cout << __FILE__ << ':' << __LINE__ << std::endl;
+        exit(1);
+        return Eigen::Matrix<RealX, DIMENSION, DIMENSION>();
+    }
+
+    template <>
+    inline Mat2dX loadMatdX<4>(Mat2d *input)
+    {
+        return Mat2dX{
+            {RealX((*input)(0, 0), (*(input + 1))(0, 0), (*(input + 2))(0, 0), (*(input + 3))(0, 0)),
+             RealX((*input)(0, 1), (*(input + 1))(0, 1), (*(input + 2))(0, 1), (*(input + 3))(0, 1))},
+            {RealX((*input)(1, 0), (*(input + 1))(1, 0), (*(input + 2))(1, 0), (*(input + 3))(1, 0)),
+             RealX((*input)(1, 1), (*(input + 1))(1, 1), (*(input + 2))(1, 1), (*(input + 3))(1, 1))}};
+    }
+
+    template <>
+    inline Mat3dX loadMatdX<4>(Mat3d *input)
+    {
+        return Mat3dX{
+            {RealX((*input)(0, 0), (*(input + 1))(0, 0), (*(input + 2))(0, 0), (*(input + 3))(0, 0)),
+             RealX((*input)(0, 1), (*(input + 1))(0, 1), (*(input + 2))(0, 1), (*(input + 3))(0, 1)),
+             RealX((*input)(0, 2), (*(input + 1))(0, 2), (*(input + 2))(0, 2), (*(input + 3))(0, 2))},
+            {RealX((*input)(1, 0), (*(input + 1))(1, 0), (*(input + 2))(1, 0), (*(input + 3))(1, 0)),
+             RealX((*input)(1, 1), (*(input + 1))(1, 1), (*(input + 2))(1, 1), (*(input + 3))(1, 1)),
+             RealX((*input)(1, 2), (*(input + 1))(1, 2), (*(input + 2))(1, 2), (*(input + 3))(1, 2))},
+            {RealX((*input)(2, 0), (*(input + 1))(2, 0), (*(input + 2))(2, 0), (*(input + 3))(2, 0)),
+             RealX((*input)(2, 1), (*(input + 1))(2, 1), (*(input + 2))(2, 1), (*(input + 3))(2, 1)),
+             RealX((*input)(2, 2), (*(input + 1))(2, 2), (*(input + 2))(2, 2), (*(input + 3))(2, 2))}};
+    }
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    Eigen::Matrix<RealX, DIMENSION, DIMENSION> gatherMatdX(StdLargeVec<Eigen::Matrix<Real, DIMENSION, DIMENSION>> &input, size_t *index)
+    {
+        std::cout << "\n Error: gatherMatdX is not defined for the native architecture !" << std::endl;
+        std::cout << __FILE__ << ':' << __LINE__ << std::endl;
+        exit(1);
+        return Eigen::Matrix<RealX, DIMENSION, DIMENSION>();
+    }
+
+    template <>
+    inline Mat2dX gatherMatdX<4>(StdLargeVec<Mat2d> &input, size_t *index)
+    {
+        return Mat2dX{
+            {RealX(input[*index](0, 0), input[*(index + 1)](0, 0), input[*(index + 2)](0, 0), input[*(index + 3)](0, 0)),
+             RealX(input[*index](0, 1), input[*(index + 1)](0, 1), input[*(index + 2)](0, 1), input[*(index + 3)](0, 1))},
+            {RealX(input[*index](1, 0), input[*(index + 1)](1, 0), input[*(index + 2)](1, 0), input[*(index + 3)](1, 0)),
+             RealX(input[*index](1, 1), input[*(index + 1)](1, 1), input[*(index + 2)](1, 1), input[*(index + 3)](1, 1))}};
+    }
+
+    template <>
+    inline Mat3dX gatherMatdX<4>(StdLargeVec<Mat3d> &input, size_t *index)
+    {
+        return Mat3dX{
+            {RealX(input[*index](0, 0), input[*(index + 1)](0, 0), input[*(index + 2)](0, 0), input[*(index + 3)](0, 0)),
+             RealX(input[*index](0, 1), input[*(index + 1)](0, 1), input[*(index + 2)](0, 1), input[*(index + 3)](0, 1)),
+             RealX(input[*index](0, 2), input[*(index + 1)](0, 2), input[*(index + 2)](0, 2), input[*(index + 3)](0, 2))},
+            {RealX(input[*index](1, 0), input[*(index + 1)](1, 0), input[*(index + 2)](1, 0), input[*(index + 3)](1, 0)),
+             RealX(input[*index](1, 1), input[*(index + 1)](1, 1), input[*(index + 2)](1, 1), input[*(index + 3)](1, 1)),
+             RealX(input[*index](1, 2), input[*(index + 1)](1, 2), input[*(index + 2)](1, 2), input[*(index + 3)](1, 2))},
+            {RealX(input[*index](2, 0), input[*(index + 1)](2, 0), input[*(index + 2)](2, 0), input[*(index + 3)](2, 0)),
+             RealX(input[*index](2, 1), input[*(index + 1)](2, 1), input[*(index + 2)](2, 1), input[*(index + 3)](2, 1)),
+             RealX(input[*index](2, 2), input[*(index + 1)](2, 2), input[*(index + 2)](2, 2), input[*(index + 3)](2, 2))}};
+    }
+
+    inline Mat2d reduceMatdX(const Mat2dX &input)
+    {
+        return Mat2d{{xsimd::reduce_add(input(0, 0)), xsimd::reduce_add(input(0, 1))},
+                     {xsimd::reduce_add(input(1, 0)), xsimd::reduce_add(input(1, 1))}};
+    }
+
+    inline Mat3d reduceMatdX(const Mat3dX &input)
+    {
+        return Mat3d{{xsimd::reduce_add(input(0, 0)), xsimd::reduce_add(input(0, 1)), xsimd::reduce_add(input(0, 2))},
+                     {xsimd::reduce_add(input(1, 0)), xsimd::reduce_add(input(1, 1)), xsimd::reduce_add(input(1, 2))},
+                     {xsimd::reduce_add(input(2, 0)), xsimd::reduce_add(input(2, 1)), xsimd::reduce_add(input(2, 2))}};
+    }
 }
 
 #endif // XSIMD_EIGEN_H

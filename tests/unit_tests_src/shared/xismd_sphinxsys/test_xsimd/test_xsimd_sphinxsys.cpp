@@ -10,104 +10,193 @@ namespace xs = xsimd;
 
 size_t vec_size = 110;
 
+Real generateRandom()
+{
+	return (((double)rand() / (RAND_MAX)) - 0.5) * 2.0;
+}
+
 TEST(test_XsimdScalar, test_BasicOperations)
 {
 	StdLargeVec<Real> a, b;
-	a.resize(vec_size, 1.0);
-	b.resize(vec_size, 2.0);
-
 	StdLargeVec<size_t> indexes;
-	indexes.resize(vec_size, 0);
-	for (size_t i = 0; i < indexes.size(); ++i)
+	a.resize(vec_size);
+	b.resize(vec_size);
+	indexes.resize(vec_size);
+	for (size_t i = 0; i < vec_size; ++i)
 	{
+		a[i] = generateRandom();
+		b[i] = generateRandom();
 		indexes[i] = i;
 	}
 
 	RealX x_sum(0.0);
-	RealXHelper helper;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		RealX ba = helper.load(&a[i]);
-		RealX bb = helper.gather(b, &indexes[i]);
-		x_sum += (ba + bb) / 2.0;
+		x_sum += (loadRealX(&a[i]) + gatherRealX<XsimdSize>(b, &indexes[i])) / 2.0;
 	}
 
-	Real sum = helper.reduce(x_sum);
+	Real sum = reduceRealX(x_sum);
 	for (size_t i = floored_vec_size; i < vec_size; ++i)
 	{
 		sum += (a[i] + b[i]) / 2.0;
 	}
 
-	EXPECT_EQ(165.0, sum);
+	Real sum_ref(0);
+	for (size_t i = 0; i < vec_size; ++i)
+	{
+		sum_ref += (a[i] + b[i]) / 2.0;
+	}
+
+	EXPECT_DOUBLE_EQ(sum_ref, sum);
 }
 
-TEST(test_XsimdVecd, test_VecdOperations)
+TEST(test_XsimdVec2d, test_Vec2dOperations)
+{
+	StdLargeVec<Vec2d> a, b;
+	StdLargeVec<size_t> indexes;
+	a.resize(vec_size);
+	b.resize(vec_size);
+	indexes.resize(vec_size);
+	for (size_t i = 0; i < vec_size; ++i)
+	{
+		a[i] = Vec2d(generateRandom(), generateRandom());
+		b[i] = Vec2d(generateRandom(), generateRandom());
+		indexes[i] = i;
+	}
+
+	Vec2dX x_sum = Vec2dX::Zero();
+	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
+	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
+	{
+		x_sum += (loadVecdX<XsimdSize>(&a[i]) + gatherVecdX<XsimdSize>(b, &indexes[i])) / 2.0;
+	}
+
+	Vec2d sum = reduceVecdX(x_sum);
+	for (size_t i = floored_vec_size; i < vec_size; ++i)
+	{
+		sum += (a[i] + b[i]) / 2.0;
+	}
+
+	Vec2d sum_ref = Vec2d::Zero();
+	for (size_t i = 0; i < vec_size; ++i)
+	{
+		sum_ref += (a[i] + b[i]) / 2.0;
+	}
+
+	EXPECT_DOUBLE_EQ(sum_ref.norm(), sum.norm());
+}
+
+TEST(test_XsimdVec3d, test_Vec3dOperations)
 {
 	StdLargeVec<Vec3d> a, b;
-	a.resize(vec_size, Vec3d(1.0, 1.0, 1.0));
-	b.resize(vec_size, Vec3d(2.0, 2.0, 2.0));
-
 	StdLargeVec<size_t> indexes;
-	indexes.resize(vec_size, 0);
-	for (size_t i = 0; i < indexes.size(); ++i)
+	a.resize(vec_size);
+	b.resize(vec_size);
+	indexes.resize(vec_size);
+	for (size_t i = 0; i < vec_size; ++i)
 	{
+		a[i] = Vec3d(generateRandom(), generateRandom(), generateRandom());
+		b[i] = Vec3d(generateRandom(), generateRandom(), generateRandom());
 		indexes[i] = i;
 	}
 
 	Vec3dX x_sum = Vec3dX::Zero();
-	Vec3dXHelper helper;
-	Vec3dX ba, bb;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		helper.gather(a, &indexes[i], ba);
-		helper.gather(b, &indexes[i], bb);
-		x_sum += (ba + bb) / 2.0;
+		x_sum += (loadVecdX<XsimdSize>(&a[i]) + gatherVecdX<XsimdSize>(b, &indexes[i])) / 2.0;
 	}
 
-	Vec3d sum = Vec3d::Zero();
-	helper.reduce(x_sum, sum);
+	Vec3d sum = reduceVecdX(x_sum);
 	for (size_t i = floored_vec_size; i < vec_size; ++i)
 	{
 		sum += (a[i] + b[i]) / 2.0;
 	}
 
-	EXPECT_EQ(Vec3d(165.0, 165.0, 165.0), sum);
+	Vec3d sum_ref = Vec3d::Zero();
+	for (size_t i = 0; i < vec_size; ++i)
+	{
+		sum_ref += (a[i] + b[i]) / 2.0;
+	}
+
+	EXPECT_DOUBLE_EQ(sum_ref.norm(), sum.norm());
 }
 
-TEST(test_XsimdMatd, test_MatdOperations)
+TEST(test_XsimdMat2d, test_Mat2dOperations)
 {
 	StdLargeVec<Mat2d> a, b;
-	a.resize(vec_size, Mat2d{{1.0, 1.0}, {1.0, 1.0}});
-	b.resize(vec_size, Mat2d{{2.0, 2.0}, {2.0, 2.0}});
-
 	StdLargeVec<size_t> indexes;
-	indexes.resize(vec_size, 0);
-	for (size_t i = 0; i < indexes.size(); ++i)
+	a.resize(vec_size);
+	b.resize(vec_size);
+	indexes.resize(vec_size);
+	for (size_t i = 0; i < vec_size; ++i)
 	{
+		a[i] = Mat2d{{generateRandom(), generateRandom()}, {generateRandom(), generateRandom()}};
+		b[i] = Mat2d{{generateRandom(), generateRandom()}, {generateRandom(), generateRandom()}};
 		indexes[i] = i;
 	}
 
 	Mat2dX x_sum = Mat2dX::Zero();
-	Mat2dXHelper helper;
-	Mat2dX ba, bb;
 	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
 	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
 	{
-		helper.gather(a, &indexes[i], ba);
-		helper.gather(b, &indexes[i], bb);
-		x_sum += (ba + bb) / 2.0;
+		x_sum += (loadMatdX<XsimdSize>(&a[i]) + gatherMatdX<XsimdSize>(b, &indexes[i])) / 2.0;
 	}
 
-	Mat2d sum = Mat2d::Zero();
-	helper.reduce(x_sum, sum);
+	Mat2d sum = reduceMatdX(x_sum);
 	for (size_t i = floored_vec_size; i < vec_size; ++i)
 	{
 		sum += (a[i] + b[i]) / 2.0;
 	}
-	Mat2d reference = Mat2d{{165.0, 165.0}, {165.0, 165.0}};
-	EXPECT_EQ(reference, sum);
+
+	Mat2d sum_ref = Mat2d::Zero();
+	for (size_t i = 0; i < vec_size; ++i)
+	{
+		sum_ref += (a[i] + b[i]) / 2.0;
+	}
+
+	EXPECT_DOUBLE_EQ(sum_ref.norm(), sum.norm());
+}
+
+TEST(test_XsimdMat3d, test_Mat3dOperations)
+{
+	StdLargeVec<Mat3d> a, b;
+	StdLargeVec<size_t> indexes;
+	a.resize(vec_size);
+	b.resize(vec_size);
+	indexes.resize(vec_size);
+	for (size_t i = 0; i < vec_size; ++i)
+	{
+		a[i] = Mat3d{{generateRandom(), generateRandom(), generateRandom()},
+					 {generateRandom(), generateRandom(), generateRandom()},
+					 {generateRandom(), generateRandom(), generateRandom()}};
+		b[i] = Mat3d{{generateRandom(), generateRandom(), generateRandom()},
+					 {generateRandom(), generateRandom(), generateRandom()},
+					 {generateRandom(), generateRandom(), generateRandom()}};
+		indexes[i] = i;
+	}
+
+	Mat3dX x_sum = Mat3dX::Zero();
+	size_t floored_vec_size = vec_size - vec_size % XsimdSize;
+	for (size_t i = 0; i < floored_vec_size; i += XsimdSize)
+	{
+		x_sum += (loadMatdX<XsimdSize>(&a[i]) + gatherMatdX<XsimdSize>(b, &indexes[i])) / 2.0;
+	}
+
+	Mat3d sum = reduceMatdX(x_sum);
+	for (size_t i = floored_vec_size; i < vec_size; ++i)
+	{
+		sum += (a[i] + b[i]) / 2.0;
+	}
+
+	Mat3d sum_ref = Mat3d::Zero();
+	for (size_t i = 0; i < vec_size; ++i)
+	{
+		sum_ref += (a[i] + b[i]) / 2.0;
+	}
+
+	EXPECT_DOUBLE_EQ(sum_ref.norm(), sum.norm());
 }
 
 int main(int argc, char *argv[])

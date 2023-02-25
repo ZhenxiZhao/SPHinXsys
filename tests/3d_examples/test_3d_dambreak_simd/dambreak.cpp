@@ -151,7 +151,7 @@ int main(int ac, char *av[])
 		{
 			initialize_a_fluid_step.parallel_exec();
 			Real Dt = get_fluid_advection_time_step_size.parallel_exec();
-			update_density_by_summation.par_simd_exec(true);
+			update_density_by_summation.parallel_exec();
 
 			Real relaxation_time = 0.0;
 			while (relaxation_time < Dt)

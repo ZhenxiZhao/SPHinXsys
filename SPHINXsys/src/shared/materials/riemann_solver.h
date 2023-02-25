@@ -22,7 +22,7 @@
  * ------------------------------------------------------------------------*/
 /**
  * @file 	riemann_solvers.h
- * @brief 	This is the collection of Riemann solvers. 
+ * @brief 	This is the collection of Riemann solvers.
  * @author	Chi ZHang and Xiangyu Hu
  */
 
@@ -35,7 +35,7 @@ namespace SPH
 {
 	/**
 	 * @struct FluidState
-	 * @brief  Struct for stored states of Riemann solver in weakly-compressible flow. 
+	 * @brief  Struct for stored states of Riemann solver in weakly-compressible flow.
 	 */
 	struct FluidState
 	{
@@ -55,7 +55,7 @@ namespace SPH
 
 	/**
 	 * @struct CompressibleFluidState
-	 * @brief  Struct for stored states of Riemann solver in compressible flow. 
+	 * @brief  Struct for stored states of Riemann solver in compressible flow.
 	 */
 
 	struct CompressibleFluidState : FluidState
@@ -78,7 +78,7 @@ namespace SPH
 
 	/**
 	 * @struct NoRiemannSolver
-	 * @brief  Central difference scheme without Riemann flux. 
+	 * @brief  Central difference scheme without Riemann flux.
 	 */
 	class NoRiemannSolver
 	{
@@ -89,8 +89,10 @@ namespace SPH
 			  c0_i_(fluid_i.ReferenceSoundSpeed()), c0_j_(fluid_j.ReferenceSoundSpeed()),
 			  rho0c0_i_(rho0_i_ * c0_i_), rho0c0_j_(rho0_j_ * c0_j_),
 			  inv_rho0c0_sum_(1.0 / (rho0c0_i_ + rho0c0_j_)){};
-		Real DissipativePJump(const Real &u_jump);
-		Real DissipativeUJump(const Real &p_jump);
+		template <typename T>
+		T DissipativePJump(const T &u_jump) { return T(0); };
+		template <typename T>
+		T DissipativeUJump(const T &p_jump) { return T(0); };
 		Real AverageP(const Real &p_i, const Real &p_j);
 		Vecd AverageV(const Vecd &vel_i, const Vecd &vel_j);
 
@@ -109,8 +111,16 @@ namespace SPH
 			  inv_rho0c0_ave_(2.0 * inv_rho0c0_sum_),
 			  rho0c0_geo_ave_(2.0 * rho0c0_i_ * rho0c0_j_ * inv_rho0c0_sum_),
 			  inv_c_ave_(0.5 * (rho0_i_ + rho0_j_) * inv_rho0c0_ave_){};
-		Real DissipativePJump(const Real &u_jump);
-		Real DissipativeUJump(const Real &p_jump);
+		template <typename T>
+		T DissipativePJump(const T &u_jump)
+		{
+			return rho0c0_geo_ave_ * u_jump * min(3.0 * max(u_jump * inv_c_ave_, T(0)), T(1));
+		};
+		template <typename T>
+		T DissipativeUJump(const T &p_jump)
+		{
+			return p_jump * inv_rho0c0_ave_;
+		};
 
 	protected:
 		Real inv_rho0c0_ave_, rho0c0_geo_ave_;
@@ -128,7 +138,7 @@ namespace SPH
 
 	/**
 	 * @struct HLLCRiemannSolverInWeaklyCompressibleFluid
-	 * @brief  HLLC Riemann for weakly-compressible flow. 
+	 * @brief  HLLC Riemann for weakly-compressible flow.
 	 */
 	class HLLCRiemannSolverInWeaklyCompressibleFluid
 	{
@@ -142,7 +152,7 @@ namespace SPH
 
 	/**
 	 * @struct HLLCRiemannSolverWithLimiterInWeaklyCompressibleFluid
-	 * @brief  HLLC Riemann with dissipation limiter for weakly-compressible flow. 
+	 * @brief  HLLC Riemann with dissipation limiter for weakly-compressible flow.
 	 */
 	class HLLCRiemannSolverWithLimiterInWeaklyCompressibleFluid
 	{
@@ -155,7 +165,7 @@ namespace SPH
 
 	/**
 	 * @struct HLLCRiemannSolver
-	 * @brief  HLLC Riemann solver. 
+	 * @brief  HLLC Riemann solver.
 	 */
 	class HLLCRiemannSolver
 	{
@@ -169,7 +179,7 @@ namespace SPH
 
 	/**
 	 * @struct HLLCRiemannSolver
-	 * @brief  HLLC Riemann solver with dissipation limiter. 
+	 * @brief  HLLC Riemann solver with dissipation limiter.
 	 */
 	class HLLCWithLimiterRiemannSolver
 	{

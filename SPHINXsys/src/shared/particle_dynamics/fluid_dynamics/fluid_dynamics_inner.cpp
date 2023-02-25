@@ -40,19 +40,18 @@ namespace SPH
 		//=================================================================================================//
 		void DensitySummationInner::interaction(size_t index_i, Real dt)
 		{
-			Neighborhood &inner_neighborhood = inner_configuration_[index_i];
+			Neighborhood &ngh = inner_configuration_[index_i];
 
 			RealX x_sigma(0.0);
-			RealXHelper helper;
-			size_t floored_current_size = inner_neighborhood.current_size_ - inner_neighborhood.current_size_ % XsimdSize;
-			for (size_t n = 0; n < floored_current_size; n += XsimdSize)
+			size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
+			for (size_t n = 0; n < floor_size; n += XsimdSize)
 			{
-				x_sigma += helper.load(&inner_neighborhood.W_ij_[n]);
+				x_sigma += loadRealX(&ngh.W_ij_[n]);
 			}
 
-			Real sigma = W0_ + helper.reduce(x_sigma);
-			for (size_t n = floored_current_size; n != inner_neighborhood.current_size_; ++n)
-				sigma += inner_neighborhood.W_ij_[n];
+			Real sigma = W0_ + reduceRealX(x_sigma);
+			for (size_t n = floor_size; n != ngh.current_size_; ++n)
+				sigma += ngh.W_ij_[n];
 
 			rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
 		}
