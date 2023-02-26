@@ -74,18 +74,33 @@ namespace SPH
 		template <class RiemannSolverType>
 		void BaseIntegration1stHalf<RiemannSolverType>::interaction(size_t index_i, Real dt)
 		{
-			Vecd acceleration =  Vecd::Zero();
-			Real rho_dissipation(0);
-			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
-			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
-			{
-				size_t index_j = inner_neighborhood.j_[n];
-				Real dW_ijV_j = inner_neighborhood.dW_ijV_j_[n];
-				const Vecd &e_ij = inner_neighborhood.e_ij_[n];
+			Neighborhood &ngh = inner_configuration_[index_i];
+			size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
 
-				acceleration -= (p_[index_i] + p_[index_j]) * dW_ijV_j * e_ij;
-				rho_dissipation += riemann_solver_.DissipativeUJump(p_[index_i] - p_[index_j]) * dW_ijV_j;
+			VecdX x_acceleration = VecdX::Zero();
+			RealX x_rho_dissipation(0);
+			RealX x_p_i = RealX(p_[index_i]);
+			for (size_t n = 0; n < floor_size; n += XsimdSize)
+			{
+				RealX x_dW_ijV_j = loadRealX(&ngh.dW_ijV_j_[n]);
+				RealX x_p_j = gatherRealX<XsimdSize>(p_, &ngh.j_[n]);
+
+				x_acceleration -= (x_p_i + x_p_j) * x_dW_ijV_j * loadVecdX<XsimdSize>(&ngh.e_ij_[n]);
+				x_rho_dissipation += riemann_solver_.DissipativeUJump(x_p_i - x_p_j) * x_dW_ijV_j;
 			}
+
+			Vecd acceleration = reduceVecdX(x_acceleration);
+			Real rho_dissipation = reduceRealX(x_rho_dissipation);
+			Real p_i = p_[index_i];
+			for (size_t n = floor_size; n != ngh.current_size_; ++n)
+			{
+				Real dW_ijV_j = ngh.dW_ijV_j_[n];
+				Real p_j = p_[ngh.j_[n]];
+
+				acceleration -= (p_i + p_j) * dW_ijV_j * ngh.e_ij_[n];
+				rho_dissipation += riemann_solver_.DissipativeUJump(p_i - p_j) * dW_ijV_j;
+			}
+
 			acc_[index_i] += acceleration / rho_[index_i];
 			drho_dt_[index_i] = rho_dissipation * rho_[index_i];
 		}

@@ -31,7 +31,6 @@
 #include "scalar_functions.h"
 #include "data_type.h"
 #include "array_allocation.h"
-#include "large_data_containers.h"
 #include "ownership.h"
 
 #define TBB_PARALLEL true

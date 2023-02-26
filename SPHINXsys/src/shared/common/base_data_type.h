@@ -48,6 +48,7 @@
 #include "SimTKmath.h"
 
 #include "scalar_functions.h"
+#include "large_data_containers.h"
 
 namespace SPH
 {
