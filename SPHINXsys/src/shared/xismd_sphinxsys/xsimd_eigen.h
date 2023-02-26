@@ -96,8 +96,15 @@ namespace SPH
     using Mat2dX = Eigen::Matrix<RealX, 2, 2>;
     using Mat3dX = Eigen::Matrix<RealX, 3, 3>;
 
-    template <int XSIMD_SIZE, int DIMENSION>
-    std::array<std::array<Real, XSIMD_SIZE>, DIMENSION> gatherTemporary(StdLargeVec<Eigen::Matrix<Real, DIMENSION, 1>> &input, size_t *index);
+    inline Vec2dX assignVecdX(const Vec2d &input)
+    {
+        return Vec2dX(RealX(input[0]), RealX(input[1]));
+    }
+
+    inline Vec3dX assignVecdX(const Vec3d &input)
+    {
+        return Vec3dX(RealX(input[0]), RealX(input[1]), RealX(input[2]));
+    }
 
     template <int XSIMD_SIZE, int DIMENSION>
     Eigen::Matrix<RealX, DIMENSION, 1> loadVecdX(Eigen::Matrix<Real, DIMENSION, 1> *input)
@@ -118,9 +125,13 @@ namespace SPH
     template <>
     inline Vec3dX loadVecdX<4>(Vec3d *input)
     {
-        return Vec3dX(RealX((*input)[0], (*(input + 1))[0], (*(input + 2))[0], (*(input + 3))[0]),
-                      RealX((*input)[1], (*(input + 1))[1], (*(input + 2))[1], (*(input + 3))[1]),
-                      RealX((*input)[2], (*(input + 1))[2], (*(input + 2))[2], (*(input + 3))[2]));
+        Real temp[3][4];
+        for (size_t i = 0; i != 4; ++i)
+            for (size_t j = 0; j != 3; ++j)
+            {
+                temp[j][i] = (*(input + i))[j];
+            }
+        return Vec3dX(loadRealX(&temp[0][0]), loadRealX(&temp[1][0]), loadRealX(&temp[2][0]));
     }
 
     template <int XSIMD_SIZE, int DIMENSION>
@@ -142,9 +153,14 @@ namespace SPH
     template <>
     inline Vec3dX gatherVecdX<4>(StdLargeVec<Vec3d> &input, size_t *index)
     {
-        return Vec3dX(RealX(input[*index][0], input[*(index + 1)][0], input[*(index + 2)][0], input[*(index + 3)][0]),
-                      RealX(input[*index][1], input[*(index + 1)][1], input[*(index + 2)][1], input[*(index + 3)][1]),
-                      RealX(input[*index][2], input[*(index + 1)][2], input[*(index + 2)][2], input[*(index + 3)][2]));
+        Real temp[3][4];
+        for (size_t i = 0; i != 4; ++i)
+            for (size_t j = 0; j != 3; ++j)
+            {
+                temp[j][i] = input[*(index + i)][j];
+            }
+
+        return Vec3dX(loadRealX(&temp[0][0]), loadRealX(&temp[1][0]), loadRealX(&temp[2][0]));
     }
 
     inline Vec2d reduceVecdX(const Vec2dX &input)
