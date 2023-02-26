@@ -15,11 +15,6 @@ namespace SPH
 		return (vel_i * rho0c0_i_ + vel_j * rho0c0_j_) * inv_rho0c0_sum_;
 	}
 	//=================================================================================================//
-	Real DissipativeRiemannSolver::DissipativePJump(const Real &u_jump)
-	{
-		return rho0c0_geo_ave_ * u_jump;
-	}
-	//=================================================================================================//
 	FluidState HLLCRiemannSolverInWeaklyCompressibleFluid::
 		getInterfaceState(const FluidState &state_i, const FluidState &state_j, const Vecd &e_ij)
 	{

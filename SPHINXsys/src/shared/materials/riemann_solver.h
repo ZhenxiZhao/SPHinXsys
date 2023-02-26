@@ -102,21 +102,22 @@ namespace SPH
 		Real rho0c0_i_, rho0c0_j_, inv_rho0c0_sum_;
 	};
 
-	class AcousticRiemannSolver : public NoRiemannSolver
+	class DissipativeRiemannSolver : public NoRiemannSolver
 	{
 	public:
 		template <class FluidI, class FluidJ>
-		AcousticRiemannSolver(FluidI &fluid_i, FluidJ &fluid_j)
+		DissipativeRiemannSolver(FluidI &fluid_i, FluidJ &fluid_j)
 			: NoRiemannSolver(fluid_i, fluid_j),
 			  inv_rho0c0_ave_(2.0 * inv_rho0c0_sum_),
-			  rho0c0_geo_ave_(2.0 * rho0c0_i_ * rho0c0_j_ * inv_rho0c0_sum_),
-			  inv_c_ave_(0.5 * (rho0_i_ + rho0_j_) * inv_rho0c0_ave_){};
+			  rho0c0_geo_ave_(2.0 * rho0c0_i_ * rho0c0_j_ * inv_rho0c0_sum_){};
+
 		template <typename T>
 		T DissipativePJump(const T &u_jump)
 		{
-			return rho0c0_geo_ave_ * u_jump * min(3.0 * max(u_jump * inv_c_ave_, T(0)), T(1));
+			return rho0c0_geo_ave_ * u_jump;
 		};
 		template <typename T>
+
 		T DissipativeUJump(const T &p_jump)
 		{
 			return p_jump * inv_rho0c0_ave_;
@@ -124,16 +125,25 @@ namespace SPH
 
 	protected:
 		Real inv_rho0c0_ave_, rho0c0_geo_ave_;
-		Real inv_c_ave_;
 	};
 
-	class DissipativeRiemannSolver : public AcousticRiemannSolver
+	class AcousticRiemannSolver : public DissipativeRiemannSolver
 	{
 	public:
 		template <class FluidI, class FluidJ>
-		DissipativeRiemannSolver(FluidI &fluid_i, FluidJ &fluid_j)
-			: AcousticRiemannSolver(fluid_i, fluid_j){};
-		Real DissipativePJump(const Real &u_jump);
+		AcousticRiemannSolver(FluidI &fluid_i, FluidJ &fluid_j)
+			: DissipativeRiemannSolver(fluid_i, fluid_j),
+			  inv_c_ave_(0.5 * (rho0_i_ + rho0_j_) * inv_rho0c0_ave_){};
+
+		template <typename T>
+		T DissipativePJump(const T &u_jump)
+		{
+			return DissipativeRiemannSolver::DissipativePJump(u_jump) *
+				   min(3.0 * max(u_jump * inv_c_ave_, T(0)), T(1));
+		};
+
+	protected:
+		Real inv_c_ave_;
 	};
 
 	/**
@@ -159,7 +169,8 @@ namespace SPH
 		Fluid &fluid_i_, &fluid_j_;
 
 	public:
-		HLLCRiemannSolverWithLimiterInWeaklyCompressibleFluid(Fluid &compressible_fluid_i, Fluid &compressible_fluid_j) : fluid_i_(compressible_fluid_i), fluid_j_(compressible_fluid_j){};
+		HLLCRiemannSolverWithLimiterInWeaklyCompressibleFluid(Fluid &compressible_fluid_i, Fluid &compressible_fluid_j)
+			: fluid_i_(compressible_fluid_i), fluid_j_(compressible_fluid_j){};
 		FluidStarState getInterfaceState(const FluidState &state_i, const FluidState &state_j, const Vecd &direction_to_i);
 	};
 

@@ -290,7 +290,7 @@ namespace SPH
 		//=================================================================================================//
 		void Oldroyd_BIntegration2ndHalf::interaction(size_t index_i, Real dt)
 		{
-//			Integration2ndHalfDissipativeRiemann::interaction(index_i, dt);
+			Integration2ndHalfDissipativeRiemann::interaction(index_i, dt);
 
 			Matd tau_i = tau_[index_i];
 			Matd stress_rate = Matd::Zero();
