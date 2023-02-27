@@ -28,7 +28,7 @@
  * 			located within the cell.
  * @author	Chi ZHang, Yongchuan and Xiangyu Hu
  */
- 
+
 #pragma once
 
 #include "base_particles.h"
@@ -67,6 +67,7 @@ namespace SPH
 							get_neighbor_relation(neighborhood, pos[index_i], index_i, list_data);
 						}
 					});
+				neighborhood.loadBatches();
 			});
 	}
 	//=================================================================================================//

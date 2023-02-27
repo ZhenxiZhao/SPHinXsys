@@ -52,15 +52,19 @@ namespace SPH
 		size_t current_size_;	/**< the current number of neighbors */
 		size_t allocated_size_; /**< the limit of neighbors does not require memory allocation  */
 
-		StdLargeVec<size_t> j_;	  /**< index of the neighbor particle. */
-		StdLargeVec<Real> W_ij_;  /**< kernel value or particle volume contribution */
+		StdLargeVec<size_t> j_;		 /**< index of the neighbor particle. */
+		StdLargeVec<Real> W_ij_;	 /**< kernel value or particle volume contribution */
 		StdLargeVec<Real> dW_ijV_j_; /**< derivative of kernel function or inter-particle surface contribution */
-		StdLargeVec<Real> r_ij_;  /**< distance between j and i. */
-		StdLargeVec<Vecd> e_ij_;  /**< unit vector pointing from j to i or inter-particle surface direction */
+		StdLargeVec<Real> r_ij_;	 /**< distance between j and i. */
+		StdLargeVec<Vecd> e_ij_;	 /**< unit vector pointing from j to i or inter-particle surface direction */
+		// batches for vectorization
+		StdLargeVec<RealX> x_dW_ijV_j_;
+		StdLargeVec<VecdX> x_e_ij_;
 
 		Neighborhood() : current_size_(0), allocated_size_(0){};
 		~Neighborhood(){};
 
+		void loadBatches();
 		void removeANeighbor(size_t neighbor_n);
 	};
 

@@ -12,6 +12,18 @@
 namespace SPH
 {
 	//=================================================================================================//
+	void Neighborhood::loadBatches()
+	{
+		x_dW_ijV_j_.clear();
+		x_e_ij_.clear();
+		size_t floor_size = current_size_ - current_size_ % XsimdSize;
+		for (size_t n = 0; n < floor_size; n += XsimdSize)
+		{
+			x_dW_ijV_j_.emplace_back(loadRealX(&dW_ijV_j_[n]));
+			x_e_ij_.emplace_back(loadVecdX<XsimdSize>(&e_ij_[n]));
+		}
+	}
+	//=================================================================================================//
 	void Neighborhood::removeANeighbor(size_t neighbor_n)
 	{
 		current_size_--;

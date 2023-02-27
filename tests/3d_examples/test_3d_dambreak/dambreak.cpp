@@ -157,8 +157,8 @@ int main(int ac, char *av[])
 			while (relaxation_time < Dt)
 			{
 
-				pressure_relaxation.parallel_exec(dt);
-				density_relaxation.parallel_exec(dt);
+				pressure_relaxation.exec(dt);
+				density_relaxation.exec(dt);
 				dt = get_fluid_time_step_size.parallel_exec();
 				relaxation_time += dt;
 				integration_time += dt;

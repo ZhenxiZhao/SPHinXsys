@@ -80,13 +80,15 @@ namespace SPH
 			VecdX x_acceleration = VecdX::Zero();
 			RealX x_rho_dissipation(0);
 			RealX x_p_i = RealX(p_[index_i]);
+			size_t batch_index = 0;
 			for (size_t n = 0; n < floor_size; n += XsimdSize)
 			{
-				RealX x_dW_ijV_j = loadRealX(&ngh.dW_ijV_j_[n]);
+				const RealX &x_dW_ijV_j = ngh.x_dW_ijV_j_[batch_index];
 				RealX x_p_j = gatherRealX<XsimdSize>(p_, &ngh.j_[n]);
 
-				x_acceleration -= (x_p_i + x_p_j) * x_dW_ijV_j * loadVecdX<XsimdSize>(&ngh.e_ij_[n]);
+				x_acceleration -= (x_p_i + x_p_j) * x_dW_ijV_j * ngh.x_e_ij_[batch_index];
 				x_rho_dissipation += riemann_solver_.DissipativeUJump(x_p_i - x_p_j) * x_dW_ijV_j;
+				batch_index++;
 			}
 
 			Vecd acceleration = reduceVecdX(x_acceleration);
@@ -132,14 +134,16 @@ namespace SPH
 			RealX x_density_change_rate(0);
 			VecdX x_p_dissipation = VecdX::Zero();
 			VecdX x_vel_i = assignVecdX(vel_[index_i]);
+			size_t batch_index = 0;
 			for (size_t n = 0; n < floor_size; n += XsimdSize)
 			{
-				RealX x_dW_ijV_j = loadRealX(&ngh.dW_ijV_j_[n]);
-				VecdX x_e_ij = loadVecdX<XsimdSize>(&ngh.e_ij_[n]);
+				const RealX &x_dW_ijV_j = ngh.x_dW_ijV_j_[batch_index];
+				const VecdX &x_e_ij = ngh.x_e_ij_[batch_index];
 
 				RealX x_u_jump = (x_vel_i - gatherVecdX<XsimdSize>(vel_, &ngh.j_[n])).dot(x_e_ij);
 				x_density_change_rate += x_u_jump * x_dW_ijV_j;
 				x_p_dissipation += riemann_solver_.DissipativePJump(x_u_jump) * x_dW_ijV_j * x_e_ij;
+				batch_index++;
 			}
 
 			Real density_change_rate = reduceRealX(x_density_change_rate);
