@@ -188,14 +188,14 @@ namespace SPH
         return Vec3d(xsimd::reduce_add(input[0]), xsimd::reduce_add(input[1]), xsimd::reduce_add(input[2]));
     }
 
-    inline Mat2dX assignVecdX(const Mat2d &input)
+    inline Mat2dX assignMatdX(const Mat2d &input)
     {
         return Mat2dX{
             {RealX(input(0, 0)), RealX(input(0, 1))},
             {RealX(input(1, 0)), RealX(input(1, 1))}};
     }
 
-    inline Mat3dX assignVecdX(const Mat3d &input)
+    inline Mat3dX assignMatdX(const Mat3d &input)
     {
         return Mat3dX{
             {RealX(input(0, 0)), RealX(input(0, 1)), RealX(input(0, 2))},
