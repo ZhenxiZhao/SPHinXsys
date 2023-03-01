@@ -96,6 +96,29 @@ namespace SPH
     using Mat2dX = Eigen::Matrix<RealX, 2, 2>;
     using Mat3dX = Eigen::Matrix<RealX, 3, 3>;
 
+    constexpr int DATA_SIZE(int rows, int cols) { return rows * cols; };
+    template <int XSIMD_SIZE, int NRow, int NCol>
+    inline void reshapeAlignedData(Real (&temp)[DATA_SIZE(NRow, NCol)][XSIMD_SIZE],
+                                   Eigen::Matrix<RealX, NRow, NRow> *input)
+    {
+        for (size_t i = 0; i != XSIMD_SIZE; ++i)
+            for (size_t j = 0; j != DATA_SIZE; ++j)
+            {
+                temp[j][i] = (*(input + i))[j];
+            }
+    }
+
+    template <int XSIMD_SIZE, int NRow, int NCol>
+    inline void reshapeUnalignedData(Real (&temp)[DATA_SIZE(NRow, NCol)][XSIMD_SIZE],
+                                     StdLargeVec<Eigen::Matrix<Real, NRow, NCol>> &input, size_t *index)
+    {
+        for (size_t i = 0; i != XSIMD_SIZE; ++i)
+            for (size_t j = 0; j != DATA_SIZE; ++j)
+            {
+                temp[j][i] = input[*(index + i)][j];
+            }
+    }
+
     inline Vec2dX assignVecdX(const Vec2d &input)
     {
         return Vec2dX(RealX(input[0]), RealX(input[1]));
@@ -126,11 +149,7 @@ namespace SPH
     inline Vec3dX loadVecdX<4>(Vec3d *input)
     {
         Real temp[3][4];
-        for (size_t i = 0; i != 4; ++i)
-            for (size_t j = 0; j != 3; ++j)
-            {
-                temp[j][i] = (*(input + i))[j];
-            }
+        reshapeAlignedData(temp, input);
         return Vec3dX(loadRealX(&temp[0][0]), loadRealX(&temp[1][0]), loadRealX(&temp[2][0]));
     }
 
