@@ -96,29 +96,6 @@ namespace SPH
     using Mat2dX = Eigen::Matrix<RealX, 2, 2>;
     using Mat3dX = Eigen::Matrix<RealX, 3, 3>;
 
-    constexpr int DATA_SIZE(int rows, int cols) { return rows * cols; };
-    template <int XSIMD_SIZE, int NRow, int NCol>
-    inline void reshapeAlignedData(Real (&temp)[DATA_SIZE(NRow, NCol)][XSIMD_SIZE],
-                                   Eigen::Matrix<RealX, NRow, NRow> *input)
-    {
-        for (size_t i = 0; i != XSIMD_SIZE; ++i)
-            for (size_t j = 0; j != DATA_SIZE; ++j)
-            {
-                temp[j][i] = (*(input + i))[j];
-            }
-    }
-
-    template <int XSIMD_SIZE, int NRow, int NCol>
-    inline void reshapeUnalignedData(Real (&temp)[DATA_SIZE(NRow, NCol)][XSIMD_SIZE],
-                                     StdLargeVec<Eigen::Matrix<Real, NRow, NCol>> &input, size_t *index)
-    {
-        for (size_t i = 0; i != XSIMD_SIZE; ++i)
-            for (size_t j = 0; j != DATA_SIZE; ++j)
-            {
-                temp[j][i] = input[*(index + i)][j];
-            }
-    }
-
     inline Vec2dX assignVecdX(const Vec2d &input)
     {
         return Vec2dX(RealX(input[0]), RealX(input[1]));
@@ -127,6 +104,28 @@ namespace SPH
     inline Vec3dX assignVecdX(const Vec3d &input)
     {
         return Vec3dX(RealX(input[0]), RealX(input[1]), RealX(input[2]));
+    }
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    inline void reshapeAlignedVecd(Real (&temp)[DIMENSION][XSIMD_SIZE],
+                                   Eigen::Matrix<Real, DIMENSION, 1> *input)
+    {
+        for (size_t k = 0; k != XSIMD_SIZE; ++k)
+            for (size_t i = 0; i != DIMENSION; ++i)
+            {
+                temp[i][k] = (*(input + k))[i];
+            }
+    }
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    inline void reshapeUnalignedVecd(Real (&temp)[DIMENSION][XSIMD_SIZE],
+                                     StdLargeVec<Eigen::Matrix<Real, DIMENSION, 1>> &input, size_t *index)
+    {
+        for (size_t k = 0; k != XSIMD_SIZE; ++k)
+            for (size_t i = 0; i != DIMENSION; ++i)
+            {
+                temp[i][k] = input[*(index + k)][i];
+            }
     }
 
     template <int XSIMD_SIZE, int DIMENSION>
@@ -141,15 +140,16 @@ namespace SPH
     template <>
     inline Vec2dX loadVecdX<4>(Vec2d *input)
     {
-        return Vec2dX(RealX((*input)[0], (*(input + 1))[0], (*(input + 2))[0], (*(input + 3))[0]),
-                      RealX((*input)[1], (*(input + 1))[1], (*(input + 2))[1], (*(input + 3))[1]));
+        Real temp[2][4];
+        reshapeAlignedVecd(temp, input);
+        return Vec2dX(loadRealX(&temp[0][0]), loadRealX(&temp[1][0]));
     }
 
     template <>
     inline Vec3dX loadVecdX<4>(Vec3d *input)
     {
         Real temp[3][4];
-        reshapeAlignedData(temp, input);
+        reshapeAlignedVecd(temp, input);
         return Vec3dX(loadRealX(&temp[0][0]), loadRealX(&temp[1][0]), loadRealX(&temp[2][0]));
     }
 
@@ -165,20 +165,16 @@ namespace SPH
     template <>
     inline Vec2dX gatherVecdX<4>(StdLargeVec<Vec2d> &input, size_t *index)
     {
-        return Vec2dX(RealX(input[*index][0], input[*(index + 1)][0], input[*(index + 2)][0], input[*(index + 3)][0]),
-                      RealX(input[*index][1], input[*(index + 1)][1], input[*(index + 2)][1], input[*(index + 3)][1]));
+        Real temp[2][4];
+        reshapeUnalignedVecd(temp, input, index);
+        return Vec2dX(loadRealX(&temp[0][0]), loadRealX(&temp[1][0]));
     }
 
     template <>
     inline Vec3dX gatherVecdX<4>(StdLargeVec<Vec3d> &input, size_t *index)
     {
         Real temp[3][4];
-        for (size_t i = 0; i != 4; ++i)
-            for (size_t j = 0; j != 3; ++j)
-            {
-                temp[j][i] = input[*(index + i)][j];
-            }
-
+        reshapeUnalignedVecd(temp, input, index);
         return Vec3dX(loadRealX(&temp[0][0]), loadRealX(&temp[1][0]), loadRealX(&temp[2][0]));
     }
 
@@ -190,6 +186,45 @@ namespace SPH
     inline Vec3d reduceVecdX(const Vec3dX &input)
     {
         return Vec3d(xsimd::reduce_add(input[0]), xsimd::reduce_add(input[1]), xsimd::reduce_add(input[2]));
+    }
+
+    inline Mat2dX assignVecdX(const Mat2d &input)
+    {
+        return Mat2dX{
+            {RealX(input(0, 0)), RealX(input(0, 1))},
+            {RealX(input(1, 0)), RealX(input(1, 1))}};
+    }
+
+    inline Mat3dX assignVecdX(const Mat3d &input)
+    {
+        return Mat3dX{
+            {RealX(input(0, 0)), RealX(input(0, 1)), RealX(input(0, 2))},
+            {RealX(input(1, 0)), RealX(input(1, 1)), RealX(input(1, 2))},
+            {RealX(input(2, 0)), RealX(input(2, 1)), RealX(input(2, 2))}};
+    }
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    inline void reshapeAlignedMatd(Real (&temp)[DIMENSION][DIMENSION][XSIMD_SIZE],
+                                   Eigen::Matrix<Real, DIMENSION, DIMENSION> *input)
+    {
+        for (size_t k = 0; k != XSIMD_SIZE; ++k)
+            for (size_t i = 0; i != DIMENSION; ++i)
+                for (size_t j = 0; j != DIMENSION; ++j)
+                {
+                    temp[i][j][k] = (*(input + k))(i, j);
+                }
+    }
+
+    template <int XSIMD_SIZE, int DIMENSION>
+    inline void reshapeUnalignedMatd(Real (&temp)[DIMENSION][DIMENSION][XSIMD_SIZE],
+                                     StdLargeVec<Eigen::Matrix<Real, DIMENSION, DIMENSION>> &input, size_t *index)
+    {
+        for (size_t k = 0; k != XSIMD_SIZE; ++k)
+            for (size_t i = 0; i != DIMENSION; ++i)
+                for (size_t j = 0; j != DIMENSION; ++j)
+                {
+                    temp[i][j][k] = input[*(index + k)](i, j);
+                }
     }
 
     template <int XSIMD_SIZE, int DIMENSION>
@@ -204,26 +239,22 @@ namespace SPH
     template <>
     inline Mat2dX loadMatdX<4>(Mat2d *input)
     {
+        Real temp[2][2][4];
+        reshapeAlignedMatd(temp, input);
         return Mat2dX{
-            {RealX((*input)(0, 0), (*(input + 1))(0, 0), (*(input + 2))(0, 0), (*(input + 3))(0, 0)),
-             RealX((*input)(0, 1), (*(input + 1))(0, 1), (*(input + 2))(0, 1), (*(input + 3))(0, 1))},
-            {RealX((*input)(1, 0), (*(input + 1))(1, 0), (*(input + 2))(1, 0), (*(input + 3))(1, 0)),
-             RealX((*input)(1, 1), (*(input + 1))(1, 1), (*(input + 2))(1, 1), (*(input + 3))(1, 1))}};
+            {loadRealX(&temp[0][0][0]), loadRealX(&temp[0][1][0])},
+            {loadRealX(&temp[1][0][0]), loadRealX(&temp[1][1][0])}};
     }
 
     template <>
     inline Mat3dX loadMatdX<4>(Mat3d *input)
     {
+        Real temp[3][3][4];
+        reshapeAlignedMatd(temp, input);
         return Mat3dX{
-            {RealX((*input)(0, 0), (*(input + 1))(0, 0), (*(input + 2))(0, 0), (*(input + 3))(0, 0)),
-             RealX((*input)(0, 1), (*(input + 1))(0, 1), (*(input + 2))(0, 1), (*(input + 3))(0, 1)),
-             RealX((*input)(0, 2), (*(input + 1))(0, 2), (*(input + 2))(0, 2), (*(input + 3))(0, 2))},
-            {RealX((*input)(1, 0), (*(input + 1))(1, 0), (*(input + 2))(1, 0), (*(input + 3))(1, 0)),
-             RealX((*input)(1, 1), (*(input + 1))(1, 1), (*(input + 2))(1, 1), (*(input + 3))(1, 1)),
-             RealX((*input)(1, 2), (*(input + 1))(1, 2), (*(input + 2))(1, 2), (*(input + 3))(1, 2))},
-            {RealX((*input)(2, 0), (*(input + 1))(2, 0), (*(input + 2))(2, 0), (*(input + 3))(2, 0)),
-             RealX((*input)(2, 1), (*(input + 1))(2, 1), (*(input + 2))(2, 1), (*(input + 3))(2, 1)),
-             RealX((*input)(2, 2), (*(input + 1))(2, 2), (*(input + 2))(2, 2), (*(input + 3))(2, 2))}};
+            {loadRealX(&temp[0][0][0]), loadRealX(&temp[0][1][0]), loadRealX(&temp[0][2][0])},
+            {loadRealX(&temp[1][0][0]), loadRealX(&temp[1][1][0]), loadRealX(&temp[1][2][0])},
+            {loadRealX(&temp[2][0][0]), loadRealX(&temp[2][1][0]), loadRealX(&temp[2][2][0])}};
     }
 
     template <int XSIMD_SIZE, int DIMENSION>
@@ -238,26 +269,22 @@ namespace SPH
     template <>
     inline Mat2dX gatherMatdX<4>(StdLargeVec<Mat2d> &input, size_t *index)
     {
+        Real temp[2][2][4];
+        reshapeUnalignedMatd(temp, input, index);
         return Mat2dX{
-            {RealX(input[*index](0, 0), input[*(index + 1)](0, 0), input[*(index + 2)](0, 0), input[*(index + 3)](0, 0)),
-             RealX(input[*index](0, 1), input[*(index + 1)](0, 1), input[*(index + 2)](0, 1), input[*(index + 3)](0, 1))},
-            {RealX(input[*index](1, 0), input[*(index + 1)](1, 0), input[*(index + 2)](1, 0), input[*(index + 3)](1, 0)),
-             RealX(input[*index](1, 1), input[*(index + 1)](1, 1), input[*(index + 2)](1, 1), input[*(index + 3)](1, 1))}};
+            {loadRealX(&temp[0][0][0]), loadRealX(&temp[0][1][0])},
+            {loadRealX(&temp[1][0][0]), loadRealX(&temp[1][1][0])}};
     }
 
     template <>
     inline Mat3dX gatherMatdX<4>(StdLargeVec<Mat3d> &input, size_t *index)
     {
+        Real temp[3][3][4];
+        reshapeUnalignedMatd(temp, input, index);
         return Mat3dX{
-            {RealX(input[*index](0, 0), input[*(index + 1)](0, 0), input[*(index + 2)](0, 0), input[*(index + 3)](0, 0)),
-             RealX(input[*index](0, 1), input[*(index + 1)](0, 1), input[*(index + 2)](0, 1), input[*(index + 3)](0, 1)),
-             RealX(input[*index](0, 2), input[*(index + 1)](0, 2), input[*(index + 2)](0, 2), input[*(index + 3)](0, 2))},
-            {RealX(input[*index](1, 0), input[*(index + 1)](1, 0), input[*(index + 2)](1, 0), input[*(index + 3)](1, 0)),
-             RealX(input[*index](1, 1), input[*(index + 1)](1, 1), input[*(index + 2)](1, 1), input[*(index + 3)](1, 1)),
-             RealX(input[*index](1, 2), input[*(index + 1)](1, 2), input[*(index + 2)](1, 2), input[*(index + 3)](1, 2))},
-            {RealX(input[*index](2, 0), input[*(index + 1)](2, 0), input[*(index + 2)](2, 0), input[*(index + 3)](2, 0)),
-             RealX(input[*index](2, 1), input[*(index + 1)](2, 1), input[*(index + 2)](2, 1), input[*(index + 3)](2, 1)),
-             RealX(input[*index](2, 2), input[*(index + 1)](2, 2), input[*(index + 2)](2, 2), input[*(index + 3)](2, 2))}};
+            {loadRealX(&temp[0][0][0]), loadRealX(&temp[0][1][0]), loadRealX(&temp[0][2][0])},
+            {loadRealX(&temp[1][0][0]), loadRealX(&temp[1][1][0]), loadRealX(&temp[1][2][0])},
+            {loadRealX(&temp[2][0][0]), loadRealX(&temp[2][1][0]), loadRealX(&temp[2][2][0])}};
     }
 
     inline Mat2d reduceMatdX(const Mat2dX &input)
