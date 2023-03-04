@@ -31,7 +31,7 @@
 
 #include <base_data_type.h>
 
-#include <include/xsimd/xsimd.hpp>
+#include <xsimd/xsimd.hpp>
 
 namespace SPH
 {

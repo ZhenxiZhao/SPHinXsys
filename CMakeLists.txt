@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.16)
 project(SPHINXsys VERSION 1.0.0 LANGUAGES CXX)
 
 set(SPHINXSYS_PROJECT_DIR ${PROJECT_SOURCE_DIR})
+set(3RDPARTY_DIR ${PROJECT_SOURCE_DIR}/3rd_party)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${SPHINXSYS_PROJECT_DIR}/cmake)
 include(Common) # brings macro to current namespace
 
@@ -76,6 +77,9 @@ if(TARGET Boost::program_options)
     target_compile_definitions(sphinxsys_core INTERFACE BOOST_AVAILABLE)
     target_link_libraries(sphinxsys_core INTERFACE Boost::program_options)
 endif()
+
+### 3rd party header only libraries
+target_include_directories(sphinxsys_core INTERFACE ${3RDPARTY_DIR}/xsimd/include) 
 
 #------ Setup the concrete libraries
 add_subdirectory(SPHINXsys)
