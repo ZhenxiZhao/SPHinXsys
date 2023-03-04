@@ -16,7 +16,17 @@ namespace SPH
 			  rho_(particles_->rho_), rho_sum_(particles_->rho_sum_), mass_(particles_->mass_),
 			  rho0_(sph_body_.base_material_->ReferenceDensity()) {}
 		//=================================================================================================//
-		void BaseDensitySummationInner::
+		void BaseDensitySummationInner::update(size_t index_i, Real dt)
+		{
+			rho_[index_i] = rho_sum_[index_i];
+		}
+		//=================================================================================================//
+		DensitySummationInner::DensitySummationInner(BaseInnerRelation &inner_relation)
+			: BaseDensitySummationInner(inner_relation),
+			  W0_(sph_body_.sph_adaptation_->getKernel()->W0(ZeroVecd)),
+			  inv_sigma0_(1.0 / sph_body_.sph_adaptation_->ReferenceNumberDensity()) {}
+		//=================================================================================================//
+		void DensitySummationInner::
 			interaction(const ParallelUnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt)
 		{
 			Neighborhood &ngh = inner_configuration_[index_i];
@@ -34,16 +44,6 @@ namespace SPH
 
 			rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
 		}
-		//=================================================================================================//
-		void BaseDensitySummationInner::update(size_t index_i, Real dt)
-		{
-			rho_[index_i] = rho_sum_[index_i];
-		}
-		//=================================================================================================//
-		DensitySummationInner::DensitySummationInner(BaseInnerRelation &inner_relation)
-			: BaseDensitySummationInner(inner_relation),
-			  W0_(sph_body_.sph_adaptation_->getKernel()->W0(ZeroVecd)),
-			  inv_sigma0_(1.0 / sph_body_.sph_adaptation_->ReferenceNumberDensity()) {}
 		//=================================================================================================//
 		DensitySummationInnerAdaptive::
 			DensitySummationInnerAdaptive(BaseInnerRelation &inner_relation)
