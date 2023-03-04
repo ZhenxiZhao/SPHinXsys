@@ -91,7 +91,23 @@ namespace SPH
 			template <class ExecutionPolicy>
 			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
 
-			inline void interaction(const ParallelUnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0)
+			{
+				Neighborhood &ngh = inner_configuration_[index_i];
+
+				RealX x_sigma(0.0);
+				size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
+				for (size_t n = 0; n < floor_size; n += XsimdSize)
+				{
+					x_sigma += loadRealX(&ngh.W_ij_[n]);
+				}
+
+				Real sigma = W0_ + reduceRealX(x_sigma);
+				for (size_t n = floor_size; n != ngh.current_size_; ++n)
+					sigma += ngh.W_ij_[n];
+
+				rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
+			};
 
 		protected:
 			Real W0_,
@@ -313,7 +329,7 @@ namespace SPH
 			template <class ExecutionPolicy>
 			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
 
-			inline void interaction(const ParallelUnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0);
 
 			void update(size_t index_i, Real dt = 0.0);
 
@@ -341,7 +357,7 @@ namespace SPH
 			template <class ExecutionPolicy>
 			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
 
-			inline void interaction(const ParallelUnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0);
 
 			void update(size_t index_i, Real dt = 0.0);
 

@@ -259,7 +259,7 @@ namespace SPH
 		//=================================================================================================//
 		template <class RiemannSolverType>
 		void BaseIntegration1stHalf<RiemannSolverType>::
-			interaction(const ParallelUnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt)
+			interaction(const UnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt)
 		{
 			Neighborhood &ngh = inner_configuration_[index_i];
 			size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
@@ -338,7 +338,7 @@ namespace SPH
 		//=================================================================================================//
 		template <class RiemannSolverType>
 		void BaseIntegration2ndHalf<RiemannSolverType>::
-			interaction(const ParallelUnsequencedPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(const UnsequencedPolicy &execution_policy, size_t index_i, Real dt)
 		{
 			Neighborhood &ngh = inner_configuration_[index_i];
 			size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;

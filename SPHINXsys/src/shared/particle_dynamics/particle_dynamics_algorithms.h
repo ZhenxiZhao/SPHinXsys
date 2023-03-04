@@ -223,6 +223,10 @@ namespace SPH
 		virtual void runMainStep(Real dt) = 0;
 		/** parallel run the main interaction step between particles. */
 		virtual void parallel_runMainStep(Real dt) = 0;
+		/** parallel run the main interaction step between particles with vectorization. */
+		virtual void par_unseq_runMainStep(Real dt) = 0;
+		/** sequential run the main interaction step between particles with vectorization. */
+		virtual void unseq_runMainStep(Real dt) = 0;
 		/** sequential run the interactions between particles. */
 		virtual void runInteraction(Real dt)
 		{
@@ -246,6 +250,30 @@ namespace SPH
 				this->post_processes_[k]->parallel_exec(dt);
 		};
 
+		/** sequential run the interactions between particles with vectorization. */
+		virtual void unseq_runInteraction(Real dt)
+		{
+			for (size_t k = 0; k < this->pre_processes_.size(); ++k)
+				this->pre_processes_[k]->parallel_exec(dt);
+
+			unseq_runMainStep(dt);
+
+			for (size_t k = 0; k < this->post_processes_.size(); ++k)
+				this->post_processes_[k]->parallel_exec(dt);
+		};
+
+		/** parallel run the interactions between particles with vectorization. */
+		virtual void par_unseq_runInteraction(Real dt)
+		{
+			for (size_t k = 0; k < this->pre_processes_.size(); ++k)
+				this->pre_processes_[k]->parallel_exec(dt);
+
+			par_unseq_runMainStep(dt);
+
+			for (size_t k = 0; k < this->post_processes_.size(); ++k)
+				this->post_processes_[k]->parallel_exec(dt);
+		};
+
 		virtual void exec(Real dt = 0.0) override
 		{
 			this->setUpdated();
@@ -258,6 +286,20 @@ namespace SPH
 			this->setUpdated();
 			this->setupDynamics(dt);
 			parallel_runInteraction(dt);
+		};
+
+		virtual void unseq_exec(Real dt = 0.0)
+		{
+			this->setUpdated();
+			this->setupDynamics(dt);
+			unseq_runInteraction(dt);
+		};
+
+		virtual void par_unseq_exec(Real dt = 0.0)
+		{
+			this->setUpdated();
+			this->setupDynamics(dt);
+			par_unseq_runInteraction(dt);
 		};
 	};
 
@@ -297,7 +339,23 @@ namespace SPH
 		{
 			particle_for(execution::par, split_cell_lists_,
 						 [&](size_t i)
-						 { this->interaction(execution::par, i, dt * 0.5); });
+						 { this->interaction(execution::seq, i, dt * 0.5); });
+		}
+
+		/** sequential run the main interaction step between particles with vectorization. */
+		virtual void unseq_runMainStep(Real dt) override
+		{
+			particle_for(execution::seq, split_cell_lists_,
+						 [&](size_t i)
+						 { this->interaction(execution::unseq, i, dt * 0.5); });
+		}
+
+		/** parallel run the main interaction step between particles with vectorization. */
+		virtual void par_unseq_runMainStep(Real dt) override
+		{
+			particle_for(execution::par, split_cell_lists_,
+						 [&](size_t i)
+						 { this->interaction(execution::unseq, i, dt * 0.5); });
 		}
 	};
 
@@ -330,7 +388,23 @@ namespace SPH
 		{
 			particle_for(execution::par, this->identifier_.LoopRange(),
 						 [&](size_t i)
-						 { this->interaction(execution::par, i, dt); });
+						 { this->interaction(execution::seq, i, dt); });
+		}
+
+		/** sequential run the main interaction step between particles with vectorization. */
+		virtual void unseq_runMainStep(Real dt) override
+		{
+			particle_for(execution::seq, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->interaction(execution::unseq, i, dt); });
+		}
+
+		/** parallel run the main interaction step between particles with vectorization. */
+		virtual void par_unseq_runMainStep(Real dt) override
+		{
+			particle_for(execution::par, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->interaction(execution::unseq, i, dt); });
 		}
 
 	protected:
@@ -367,6 +441,22 @@ namespace SPH
 		virtual void parallel_exec(Real dt = 0.0) override
 		{
 			InteractionDynamics<LocalDynamicsType>::parallel_exec(dt);
+			particle_for(execution::par, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->update(i, dt); });
+		};
+
+		virtual void unseq_exec(Real dt = 0.0) override
+		{
+			InteractionDynamics<LocalDynamicsType>::unseq_exec(dt);
+			particle_for(execution::seq, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->update(i, dt); });
+		};
+
+		virtual void par_unseq_exec(Real dt = 0.0) override
+		{
+			InteractionDynamics<LocalDynamicsType>::par_unseq_exec(dt);
 			particle_for(execution::par, this->identifier_.LoopRange(),
 						 [&](size_t i)
 						 { this->update(i, dt); });
@@ -415,6 +505,38 @@ namespace SPH
 						 { this->initialization(i, dt); });
 
 			InteractionDynamics<LocalDynamicsType>::parallel_runInteraction(dt);
+
+			particle_for(execution::par, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->update(i, dt); });
+		};
+
+		virtual void unseq_exec(Real dt = 0.0) override
+		{
+			this->setUpdated();
+			this->setupDynamics(dt);
+
+			particle_for(execution::seq, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->initialization(i, dt); });
+
+			InteractionDynamics<LocalDynamicsType>::unseq_runInteraction(dt);
+
+			particle_for(execution::seq, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->update(i, dt); });
+		};
+
+		virtual void par_unseq_exec(Real dt = 0.0) override
+		{
+			this->setUpdated();
+			this->setupDynamics(dt);
+
+			particle_for(execution::par, this->identifier_.LoopRange(),
+						 [&](size_t i)
+						 { this->initialization(i, dt); });
+
+			InteractionDynamics<LocalDynamicsType>::par_unseq_runInteraction(dt);
 
 			particle_for(execution::par, this->identifier_.LoopRange(),
 						 [&](size_t i)

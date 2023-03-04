@@ -26,25 +26,6 @@ namespace SPH
 			  W0_(sph_body_.sph_adaptation_->getKernel()->W0(ZeroVecd)),
 			  inv_sigma0_(1.0 / sph_body_.sph_adaptation_->ReferenceNumberDensity()) {}
 		//=================================================================================================//
-		void DensitySummationInner::
-			interaction(const ParallelUnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt)
-		{
-			Neighborhood &ngh = inner_configuration_[index_i];
-
-			RealX x_sigma(0.0);
-			size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
-			for (size_t n = 0; n < floor_size; n += XsimdSize)
-			{
-				x_sigma += loadRealX(&ngh.W_ij_[n]);
-			}
-
-			Real sigma = W0_ + reduceRealX(x_sigma);
-			for (size_t n = floor_size; n != ngh.current_size_; ++n)
-				sigma += ngh.W_ij_[n];
-
-			rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
-		}
-		//=================================================================================================//
 		DensitySummationInnerAdaptive::
 			DensitySummationInnerAdaptive(BaseInnerRelation &inner_relation)
 			: BaseDensitySummationInner(inner_relation),

@@ -21,7 +21,7 @@
  *                                                                          *
  * ------------------------------------------------------------------------*/
 /**
- * @file 	exceution_policy.h
+ * @file 	execution_policy.h
  * @brief 	This is for the base functions for particle iterator.
  * @author	Chi ZHang and Xiangyu Hu
  */
@@ -37,6 +37,10 @@ namespace SPH
         {
         };
 
+        class UnsequencedPolicy
+        {
+        };
+
         class ParallelPolicy
         {
         };
@@ -46,6 +50,7 @@ namespace SPH
         };
 
         inline constexpr SequencedPolicy seq{};
+        inline constexpr UnsequencedPolicy unseq{};
         inline constexpr ParallelPolicy par{};
         inline constexpr ParallelUnsequencedPolicy par_unseq{};
     }
