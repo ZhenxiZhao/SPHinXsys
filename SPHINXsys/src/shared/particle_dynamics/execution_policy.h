@@ -10,7 +10,7 @@
  *																			*
  * SPHinXsys is partially funded by German Research Foundation				*
  * (Deutsche Forschungsgemeinschaft) DFG HU1527/6-1, HU1527/10-1,			*
- *  HU1527/12-1 and HU1527/12-4													*
+ *  HU1527/12-1 and HU1527/12-4												*
  *                                                                          *
  * Portions copyright (c) 2017-2022 Technical University of Munich and		*
  * the authors' affiliations.												*
@@ -21,51 +21,33 @@
  *                                                                          *
  * ------------------------------------------------------------------------*/
 /**
- * @file 	large_data_containers.h
- * @brief 	Data container for large vector, e.g. particle data. 
+ * @file 	exceution_policy.h
+ * @brief 	This is for the base functions for particle iterator.
  * @author	Chi ZHang and Xiangyu Hu
  */
-#ifndef LARGE_DATA_CONTAINER_H
-#define LARGE_DATA_CONTAINER_H
 
-#include "tbb/blocked_range.h"
-#include "tbb/blocked_range2d.h"
-#include "tbb/blocked_range3d.h"
-#include "tbb/parallel_for.h"
-#include "tbb/parallel_reduce.h"
-#include "tbb/tick_count.h"
-#include "tbb/scalable_allocator.h"
-#include "tbb/concurrent_unordered_set.h"
-#include "tbb/concurrent_vector.h"
-#include "tbb/cache_aligned_allocator.h"
+#ifndef EXECUTION_POLICY_H
+#define EXECUTION_POLICY_H
 
-#include <array>
+namespace SPH
+{
+    namespace execution
+    {
+        class SequencedPolicy
+        {
+        };
 
-namespace SPH {
+        class ParallelPolicy
+        {
+        };
 
-	static tbb::affinity_partitioner ap;
-	typedef tbb::blocked_range<size_t> IndexRange;
-	typedef tbb::blocked_range2d<size_t> IndexRange2d;
-	typedef tbb::blocked_range3d<size_t> IndexRange3d;
+        class ParallelUnsequencedPolicy
+        {
+        };
 
-	typedef tbb::tick_count TickCount;
-	typedef tbb::tick_count::interval_t TimeInterval;
-
-
-	template <typename T>
-	using ConcurrentVec = tbb::concurrent_vector<T>;
-
-	template <typename T>
-	using StdLargeVec = std::vector<T, tbb::cache_aligned_allocator<T>>;
-
-	template <typename T>
-	using StdVec = std::vector<T>;
-
-	template <typename T>
-	using DoubleVec = std::vector<std::vector<T>>;
-
-	template <typename T>
-	using TripleVec = std::vector<std::vector<std::vector<T>>>;
+        inline constexpr SequencedPolicy seq{};
+        inline constexpr ParallelPolicy par{};
+        inline constexpr ParallelUnsequencedPolicy par_unseq{};
+    }
 }
-
-#endif //LARGE_DATA_CONTAINER_H
+#endif // EXECUTION_POLICY_H
