@@ -82,9 +82,9 @@ int main()
 						  << GlobalStaticVariables::physical_time_ << "	dt: "
 						  << dt << "\n";
 			}
-			stress_relaxation_first_half.parallel_exec(dt);
+			stress_relaxation_first_half.unseq_exec(dt);
 			constraint_holder.parallel_exec(dt);
-			stress_relaxation_second_half.parallel_exec(dt);
+			stress_relaxation_second_half.unseq_exec(dt);
 
 			ite++;
 			dt = computing_time_step_size.parallel_exec();

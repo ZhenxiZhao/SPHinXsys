@@ -246,10 +246,47 @@ namespace SPH
 			virtual ~KirchhoffIntegration1stHalf(){};
 			void initialization(size_t index_i, Real dt = 0.0);
 
+			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0)
+			{
+				Neighborhood &ngh = inner_configuration_[index_i];
+				size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
+
+				VecdX x_acceleration = VecdX::Zero();
+				VecdX x_pos_i = assignVecdX(pos_[index_i]);
+				RealX x_J_to_minus_2_over_dimension_i(J_to_minus_2_over_dimension_[index_i]);
+				MatdX x_stress_on_particle_i = assignMatdX(stress_on_particle_[index_i]);
+				size_t batch_index = 0;
+				for (size_t n = 0; n < floor_size; n += XsimdSize)
+				{
+					VecdX x_shear_force_ij = correction_factor_ * elastic_solid_.ShearModulus() *
+											 (x_J_to_minus_2_over_dimension_i + gatherRealX<XsimdSize>(J_to_minus_2_over_dimension_, &ngh.j_[n])) *
+											 (x_pos_i - gatherVecdX<XsimdSize>(pos_, &ngh.j_[n])) / loadRealX(&ngh.r_ij_[n]);
+					x_acceleration += ((x_stress_on_particle_i + gatherMatdX<XsimdSize>(stress_on_particle_, &ngh.j_[n])) * ngh.x_e_ij_[batch_index] + x_shear_force_ij) *
+									  ngh.x_dW_ijV_j_[batch_index] * inv_rho0_;
+
+					batch_index++;
+				}
+
+				Vecd acceleration = reduceVecdX(x_acceleration);
+				const Vecd &pos_i = pos_[index_i];
+				const Real &J_to_minus_2_over_dimension_i = J_to_minus_2_over_dimension_[index_i];
+				const Matd &stress_on_particle_i = stress_on_particle_[index_i];
+
+				for (size_t n = floor_size; n != ngh.current_size_; ++n)
+				{
+					size_t index_j = ngh.j_[n];
+					Vecd shear_force_ij = correction_factor_ * elastic_solid_.ShearModulus() *
+										  (J_to_minus_2_over_dimension_i + J_to_minus_2_over_dimension_[index_j]) *
+										  (pos_i - pos_[index_j]) / ngh.r_ij_[n];
+					acceleration += ((stress_on_particle_i + stress_on_particle_[index_j]) * ngh.e_ij_[n] + shear_force_ij) *
+									ngh.dW_ijV_j_[n] * inv_rho0_;
+				}
+				acc_[index_i] = acceleration;
+			};
+
 			template <class ExecutionPolicy>
 			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0)
 			{
-				// including gravity and force from fluid
 				Vecd acceleration = Vecd::Zero();
 				const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
 				for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
@@ -283,26 +320,54 @@ namespace SPH
 			virtual ~Integration2ndHalf(){};
 			void initialization(size_t index_i, Real dt = 0.0);
 
+			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0)
+			{
+				Neighborhood &ngh = inner_configuration_[index_i];
+				size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
+
+				VecdX x_vel_i = assignVecdX(vel_[index_i]);
+				MatdX x_deformation_gradient_rate = MatdX::Zero();
+				size_t batch_index = 0;
+				for (size_t n = 0; n < floor_size; n += XsimdSize)
+				{
+					x_deformation_gradient_rate -=
+						(x_vel_i - gatherVecdX<XsimdSize>(vel_, &ngh.j_[n])) *
+						(ngh.x_dW_ijV_j_[batch_index] * ngh.x_e_ij_[batch_index]).transpose();
+					batch_index++;
+				}
+
+				const Vecd &vel_i = vel_[index_i];
+				Matd deformation_gradient_rate = reduceMatdX(x_deformation_gradient_rate);
+				for (size_t n = floor_size; n != ngh.current_size_; ++n)
+				{
+					deformation_gradient_rate -=
+						(vel_i - vel_[ngh.j_[n]]) *
+						(ngh.dW_ijV_j_[n] * ngh.e_ij_[n]).transpose();
+				}
+
+				dF_dt_[index_i] = deformation_gradient_rate * B_[index_i];
+			};
+
 			template <class ExecutionPolicy>
 			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0)
 			{
-				const Vecd &vel_n_i = vel_[index_i];
+				Neighborhood &ngh = inner_configuration_[index_i];
 
-				Matd deformation_gradient_change_rate = Matd::Zero();
-				const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
-				for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
+				const Vecd &vel_i = vel_[index_i];
+				Matd deformation_gradient_rate = Matd::Zero();
+				for (size_t n = 0; n != ngh.current_size_; ++n)
 				{
-					size_t index_j = inner_neighborhood.j_[n];
-
-					Vecd gradW_ij = inner_neighborhood.dW_ijV_j_[n] * inner_neighborhood.e_ij_[n];
-					deformation_gradient_change_rate -= (vel_n_i - vel_[index_j]) * gradW_ij.transpose();
+					deformation_gradient_rate -=
+						(vel_i - vel_[ngh.j_[n]]) *
+						(ngh.dW_ijV_j_[n] * ngh.e_ij_[n]).transpose();
 				}
 
-				dF_dt_[index_i] = deformation_gradient_change_rate * B_[index_i];
+				dF_dt_[index_i] = deformation_gradient_rate * B_[index_i];
 			};
 
 			void update(size_t index_i, Real dt = 0.0);
 		};
+
 	}
 }
 #endif // ELASTIC_DYNAMICS_H

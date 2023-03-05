@@ -88,9 +88,6 @@ namespace SPH
 			explicit DensitySummationInner(BaseInnerRelation &inner_relation);
 			virtual ~DensitySummationInner(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
-
 			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0)
 			{
 				Neighborhood &ngh = inner_configuration_[index_i];
@@ -108,6 +105,9 @@ namespace SPH
 
 				rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
 			};
+
+			template <class ExecutionPolicy>
+			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
 
 		protected:
 			Real W0_,
