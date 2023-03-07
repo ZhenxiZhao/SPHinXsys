@@ -23,6 +23,10 @@
 /**
  * @file 	xsimd_eigen.h
  * @brief 	This the interface to use eigen and xsimd for vectorization.
+ * @details Here, three main functions are provided: load, gather and reduce.
+ * Load is used for transferring cache aligned data to batch, and gather is for unaligned data.
+ * Since transpose is required to transfer vectors and matrixes into batches, especially for matrix, 
+ * one should avoid to vectorized these data except the following operations are expansive if not vectorized.   
  * @author	Xiangyu Hu
  */
 
