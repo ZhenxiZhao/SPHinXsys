@@ -179,16 +179,18 @@ namespace SPH
 				particle_spacing_ratio2 *= 0.1 * particle_spacing_ratio2;
 
 				StdLargeVec<Vecd> &n_k = *(this->wall_n_[k]);
+				StdLargeVec<Vecd> &pos_k = *(this->wall_pos_[k]);
 				Neighborhood &wall_neighborhood = (*FluidWallData::contact_configuration_[k])[index_i];
 				for (size_t n = 0; n != wall_neighborhood.current_size_; ++n)
 				{
 					size_t index_j = wall_neighborhood.j_[n];
-					Vecd &e_ij = wall_neighborhood.e_ij_[n];
 					Real dW_ijV_j = wall_neighborhood.dW_ijV_j_[n];
-					Real r_ij = wall_neighborhood.r_ij_[n];
 					Vecd &n_j = n_k[index_j];
 
 					/** penalty method to prevent particle running into boundary */
+					Vecd r_vec_ij = this->pos_[index_i] - pos_k[index_j];
+					Real r_ij = r_vec_ij.norm();
+					Vecd e_ij = r_vec_ij / (r_ij + Eps);
 					Real projection = e_ij.dot(n_j);
 					Real delta = 2.0 * projection * r_ij * particle_spacing_j1;
 					Real beta = delta < 1.0 ? (1.0 - delta) * (1.0 - delta) * particle_spacing_ratio2 : 0.0;

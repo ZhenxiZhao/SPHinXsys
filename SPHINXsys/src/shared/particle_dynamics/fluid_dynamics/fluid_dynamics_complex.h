@@ -113,7 +113,7 @@ namespace SPH
 		public:
 			template <typename... Args>
 			explicit DensitySummationComplexAdaptive(Args &&...args)
-			: BaseDensitySummationComplex<DensitySummationInnerAdaptive>(std::forward<Args>(args)...){};
+				: BaseDensitySummationComplex<DensitySummationInnerAdaptive>(std::forward<Args>(args)...){};
 			virtual ~DensitySummationComplexAdaptive(){};
 			void interaction(size_t index_i, Real dt = 0.0);
 		};
@@ -207,6 +207,10 @@ namespace SPH
 				  penalty_strength_(penalty_strength)
 			{
 				this->particles_->registerVariable(non_cnsrv_acc_, "NonConservativeAcceleration");
+				for (size_t k = 0; k != FluidWallData::contact_particles_.size(); ++k)
+				{
+					wall_pos_.push_back(&(FluidWallData::contact_particles_[k]->pos_));
+				}
 			};
 			template <typename... Args>
 			BaseExtendIntegration1stHalfWithWall(ComplexRelation &fluid_wall_relation,
@@ -221,6 +225,7 @@ namespace SPH
 		protected:
 			Real penalty_strength_;
 			StdLargeVec<Vecd> non_cnsrv_acc_;
+			StdVec<StdLargeVec<Vecd> *> wall_pos_;
 
 			virtual Vecd computeNonConservativeAcceleration(size_t index_i) override;
 		};
