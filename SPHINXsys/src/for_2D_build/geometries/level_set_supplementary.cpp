@@ -441,7 +441,7 @@ namespace SPH
 				{
 					Vecu neighbor_index = Vecu(global_index_[0] + i, global_index_[1] + j);
 					Real phi_neighbor = DataValueFromGlobalIndex(phi_, neighbor_index);
-					if (phi_neighbor > -data_spacing_)
+					if (phi_neighbor > - data_spacing_)
 					{
 						Vecd displacement = position - global_mesh_.GridPositionFromIndex(neighbor_index);
 						Real distance = displacement.norm();
@@ -451,7 +451,55 @@ namespace SPH
 					}
 				}
 		}
+		return integral * data_spacing_ * data_spacing_;
+	}
+	//=============================================================================================//
+	Vecd LevelSet::computeStressKernelGradientIntegral(const Vecd& position)
+	{
+		Real phi = probeSignedDistance(position);
+		Real cutoff_radius = kernel_.CutOffRadius(global_h_ratio_);
+		Real threshold = cutoff_radius + data_spacing_;
 
+		Vecd integral = Vecd::Zero();
+		if (fabs(phi) < threshold)
+		{
+			Vecu global_index_ = global_mesh_.CellIndexFromPosition(position);
+			for (int i = -3; i != 4; ++i)
+				for (int j = -3; j != 4; ++j)
+				{
+					Vecu neighbor_index = Vecu(global_index_[0] + i, global_index_[1] + j);
+					Real phi_neighbor = DataValueFromGlobalIndex(phi_, neighbor_index);
+					if (phi_neighbor > -data_spacing_)
+					{
+						Vecd displacement = position - global_mesh_.GridPositionFromIndex(neighbor_index);
+						Real distance = displacement.norm();
+						Vecd position_outer = global_mesh_.GridPositionFromIndex(neighbor_index);
+						Matd stress = Matd::Zero();
+						if (distance < cutoff_radius)
+						{
+							Vecu global_index_outer_ = neighbor_index;
+							for (int i = -3; i != 4; ++i)
+							{
+								for (int j = -3; j != 4; ++j)
+								{
+									Vecu neighbor_index_outer = Vecu(global_index_outer_[0] + i, global_index_outer_[1] + j);
+									Real phi_neighbor_outer_ = DataValueFromGlobalIndex(phi_, neighbor_index_outer);
+									Vecd displacement_outer = position_outer - global_mesh_.GridPositionFromIndex(neighbor_index_outer);
+									Real distance_outer = displacement_outer.norm();
+									if (distance_outer < cutoff_radius)
+									{
+										stress -= displacement_outer * displacement_outer.transpose() * kernel_.dW(global_h_ratio_, distance_outer, displacement_outer) *
+												  data_spacing_ * data_spacing_ / (distance_outer + TinyReal);
+									}
+								}
+							}
+
+							integral += stress.inverse() * displacement * kernel_.dW(global_h_ratio_, distance, displacement) *
+								        computeHeaviside(phi_neighbor, data_spacing_) / (distance + TinyReal);
+						}
+					}
+				}
+		} 
 		return integral * data_spacing_ * data_spacing_;
 	}
 	//=============================================================================================//

@@ -93,9 +93,43 @@ namespace SPH
 		class RelaxationAccelerationInnerWithLevelSetCorrection : public RelaxationAccelerationInner
 		{
 		public:
-			explicit RelaxationAccelerationInnerWithLevelSetCorrection(
-				BaseInnerRelation &inner_relation);
-			virtual ~RelaxationAccelerationInnerWithLevelSetCorrection(){};
+			explicit RelaxationAccelerationInnerWithLevelSetCorrection(BaseInnerRelation &inner_relation);
+			virtual ~RelaxationAccelerationInnerWithLevelSetCorrection() {};
+			void interaction(size_t index_i, Real dt = 0.0);
+
+		protected:
+			LevelSetShape *level_set_shape_;
+			SPHAdaptation *sph_adaptation_;
+		};
+
+		/**
+		 * @class RelaxationAccelerationFirstOrderInner
+		 * @brief simple algorithm for physics relaxation
+		 * without considering contact interaction by first order consistency.
+		 */
+		class RelaxationAccelerationFirstOrderInner : public LocalDynamics, public RelaxDataDelegateInner
+		{
+		public:
+			explicit RelaxationAccelerationFirstOrderInner(BaseInnerRelation& inner_relation);
+			virtual ~RelaxationAccelerationFirstOrderInner() {};
+			void interaction(size_t index_i, Real dt = 0.0);
+
+		protected:
+			Kernel* kernel_;
+			StdLargeVec<Vecd>& acc_, & pos_;
+			StdLargeVec<Matd>& stress_;
+		};
+
+		/**
+		 * @class RelaxationAccelerationFirstOrderInnerWithLevelSetCorrection
+		 * @brief we constrain particles to a level function representing the interface.
+		 */
+		class RelaxationAccelerationFirstOrderInnerWithLevelSetCorrection : public RelaxationAccelerationFirstOrderInner
+		{
+		public:
+			explicit RelaxationAccelerationFirstOrderInnerWithLevelSetCorrection(
+				BaseInnerRelation& inner_relation);
+			virtual ~RelaxationAccelerationFirstOrderInnerWithLevelSetCorrection() {};
 			void interaction(size_t index_i, Real dt = 0.0);
 
 		protected:
@@ -206,6 +240,31 @@ namespace SPH
 		};
 
 		/**
+		 * @class RelaxationStepFirstOrderInner
+		 * @brief carry out particle relaxation step of particle within the body 
+		 * with the first order consisitency.
+		 */
+		class RelaxationStepFirstOrderInner : public BaseDynamics<void>
+		{
+		public:
+			explicit RelaxationStepFirstOrderInner(BaseInnerRelation& inner_relation,
+				                                   bool level_set_correction = false);
+			virtual ~RelaxationStepFirstOrderInner() {};
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface>& SurfaceBounding() { return surface_bounding_; };
+			virtual void exec(Real dt = 0.0) override;
+			virtual void parallel_exec(Real dt = 0.0) override;
+
+		protected:
+			RealBody* real_body_;
+			BaseInnerRelation& inner_relation_;
+			NearShapeSurface near_shape_surface_;
+			UniquePtr<BaseDynamics<void>> relaxation_acceleration_inner_;
+			ReduceDynamics<GetTimeStepSizeSquare> get_time_step_square_;
+			SimpleDynamics<UpdateParticlePosition> update_particle_position_;
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
+		};
+
+		/**
 		 * @class RelaxationAccelerationComplexWithLevelSetCorrection
 		 * @brief compute relaxation acceleration while consider the present of contact bodies
 		 * with considering contact interaction
@@ -249,7 +308,7 @@ namespace SPH
 			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
 		};
 
-		/** Added by Bo for particle implicit relaxation and 0th and 1st consistency. */
+		/** Here added by Bo for particle implicit relaxation and 0th and 1st consistency. */
 		template <typename ErrorDataType, typename ParameterADataType, typename ParameterCDataType>
 		struct ErrorAndParameters
 		{
@@ -264,7 +323,7 @@ namespace SPH
 
 		/**
 		 * @class RelaxationImplicitInner
-		 * @brief carry out particle relaxation by position implicit evolution.
+		 * @brief carry out particle relaxation by position with implicit evolution.
 		 */
 		class RelaxationImplicitInner : public LocalDynamics, public RelaxDataDelegateInner
 		{
@@ -280,7 +339,7 @@ namespace SPH
 			Kernel* kernel_;
 			StdLargeVec<Real>& Vol_;
 			StdLargeVec<Vecd>& pos_;
-			StdLargeVec<Real> residue_implicit_relaxation_;
+			StdLargeVec<Real> implicit_relaxation_residue_;
 		};
 
 		/**
@@ -314,12 +373,110 @@ namespace SPH
 			virtual void parallel_exec(Real dt = 0.0) override;
 
 		protected:
-			bool level_set_correction_;
 			RealBody* real_body_;
 			BaseInnerRelation& inner_relation_;
 			NearShapeSurface near_shape_surface_;
 			UniquePtr<BaseDynamics<void>> relaxation_evolution_inner_;
 			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
+		};
+
+		/** 
+		 * @class RelaxationFirstOrderImplicitInner
+		 * @brief carry out particle relaxation by first ordre consistency implicit evolution.
+		 */
+		class RelaxationFirstOrderImplicitInner : public LocalDynamics, public RelaxDataDelegateInner
+		{
+		public:
+			explicit RelaxationFirstOrderImplicitInner(BaseInnerRelation& inner_relation);
+			virtual ~RelaxationFirstOrderImplicitInner() {};
+			void interaction(size_t index_i, Real dt = 0.0);
+
+		protected:
+			virtual ErrorAndParameters<Vecd, Matd, Matd> computeErrorAndParameters(size_t index_i, Real dt = 0.0);
+			virtual void updateStates(size_t index_i, Real dt, const ErrorAndParameters<Vecd, Matd, Matd>& error_and_parameters);
+
+			Kernel* kernel_;
+			StdLargeVec<Real>& Vol_;
+			StdLargeVec<Vecd>& pos_;
+			StdLargeVec<Matd>& stress_;
+			StdLargeVec<Real> implicit_first_order_relaxation_residue_;
+		};
+		
+		/**
+		 * @class RelaxationFirstOrderEvolutionInnerWithLevelSetCorrection
+		 * @brief we constrain particles to a level function representing the interface.
+		 */
+		class RelaxationFirstOrderImplicitInnerWithLevelSetCorrection : public RelaxationFirstOrderImplicitInner
+		{
+		public:
+			explicit RelaxationFirstOrderImplicitInnerWithLevelSetCorrection(BaseInnerRelation& inner_relation);
+			virtual ~RelaxationFirstOrderImplicitInnerWithLevelSetCorrection() {};
+
+		protected:
+			virtual ErrorAndParameters<Vecd, Matd, Matd> computeErrorAndParameters(size_t index_i, Real dt = 0.0) override;
+
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+		};
+
+		/**
+		 * @class RelaxationFirstOrderEvolutionInner
+		 * @brief carry out the particle relaxation evolution from first order consistency within the body
+		 */
+		class RelaxationFirstOrderEvolutionInner : public BaseDynamics<void>
+		{
+		public:
+			explicit RelaxationFirstOrderEvolutionInner(BaseInnerRelation& inner_relation, bool level_set_correction = false);
+			virtual ~RelaxationFirstOrderEvolutionInner() {};
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface>& SurfaceBounding() { return surface_bounding_; };
+			virtual void exec(Real dt = 0.0) override;
+			virtual void parallel_exec(Real dt = 0.0) override;
+
+		protected:
+			RealBody* real_body_;
+			BaseInnerRelation& inner_relation_;
+			NearShapeSurface near_shape_surface_;
+			UniquePtr<BaseDynamics<void>> relaxation_evolution_inner_;
+			SimpleDynamics<ShapeSurfaceBounding, NearShapeSurface> surface_bounding_;
+		};
+
+		/**
+		 * @class CalculateParticleVolume
+		 * @brief calculate the particle volume by kernel integral
+		 */
+		class CalculateParticleVolume : public LocalDynamics, public RelaxDataDelegateInner
+		{
+		public:
+			explicit CalculateParticleVolume(BaseInnerRelation& inner_relation);
+			virtual ~CalculateParticleVolume() {};
+			void interaction(size_t index_i, Real dt = 0.0);
+
+		protected:
+			Real Vol_0_;
+			Real W0_;
+			StdLargeVec<Real> &Vol_;
+			StdLargeVec<Vecd> &pos_;
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+		};
+
+		/**
+		 * @class CalcualteParticleStress
+		 * @brief calculate the particle stress with first order consistency
+		 */
+		class CalculateParticleStress : public LocalDynamics, public RelaxDataDelegateInner
+		{
+		public:
+			explicit CalculateParticleStress(BaseInnerRelation& inner_relation);
+			virtual ~CalculateParticleStress() {};
+			void interaction(size_t index_i, Real dt = 0.0);
+
+		protected:
+			StdLargeVec<Vecd> pos_;
+			StdLargeVec<Matd> stress_;
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+
 		};
 
 		/**
@@ -418,8 +575,9 @@ namespace SPH
 			void interaction(size_t index_i, Real dt);
 
 		protected:
-			StdLargeVec<Vecd>& acc_, &pos_;
+			StdLargeVec<Vecd>& pos_;
 			StdLargeVec<Real>& mass_;
+			StdLargeVec<Matd>& stress_;
 			StdLargeVec<Real> particle_kinetic_energy;
 			LevelSetShape* level_set_shape_;
 			SPHAdaptation* sph_adaptation_;
@@ -440,7 +598,28 @@ namespace SPH
 			Real W0_;
 			StdLargeVec<Real>& Vol_;
 			StdLargeVec<Vecd>& pos_;
+			StdLargeVec<Matd>& stress_;
 			StdLargeVec<Real> unit_zero_order_;
+			LevelSetShape* level_set_shape_;
+			SPHAdaptation* sph_adaptation_;
+		};
+
+		/**
+		 * @class CheckFirstOrderConistency
+		 * @brief calculate the first order consistency
+		 */
+		class CheckFirstOrderConsistency : public LocalDynamics, public GeneralDataDelegateInner
+		{
+		public:
+			CheckFirstOrderConsistency(BaseInnerRelation& inner_relation);
+			virtual ~CheckFirstOrderConsistency() {};
+			void interaction(size_t index_i, Real dt);
+
+		protected:
+			StdLargeVec<Real>& Vol_;
+			StdLargeVec<Vecd>& pos_;
+			StdLargeVec<Matd>& stress_;
+			StdLargeVec<Real> first_order_;
 			LevelSetShape* level_set_shape_;
 			SPHAdaptation* sph_adaptation_;
 		};

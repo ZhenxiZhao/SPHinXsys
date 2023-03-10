@@ -53,6 +53,7 @@ namespace SPH
 		virtual Vecd probeLevelSetGradient(const Vecd &position) = 0;
 		virtual Real probeKernelIntegral(const Vecd &position, Real h_ratio = 1.0) = 0;
 		virtual Vecd probeKernelGradientIntegral(const Vecd &position, Real h_ratio = 1.0) = 0;
+		virtual Vecd probeStressKernelGradientIntegral(const Vecd& position, Real h_ratio = 1.0) = 0;
 		virtual Matd probeKernelSecondGradientIntegral(const Vecd& position, Real h_ratio = 1.0) = 0;
 		virtual Matd probeDisplacementKernelGradientIntegral(const Vecd& position, Real h_ratio = 1.0) = 0;
 
@@ -100,12 +101,14 @@ namespace SPH
 		virtual Vecd probeLevelSetGradient(const Vecd &position) override;
 		virtual Real probeKernelIntegral(const Vecd &position, Real h_ratio = 1.0) override;
 		virtual Vecd probeKernelGradientIntegral(const Vecd &position, Real h_ratio = 1.0) override;
+		virtual Vecd probeStressKernelGradientIntegral(const Vecd& position, Real h_ratio = 1.0) override;
 		virtual Matd probeKernelSecondGradientIntegral(const Vecd& position, Real h_ratio = 1.0) override;
 		virtual Matd probeDisplacementKernelGradientIntegral(const Vecd& position, Real h_ratio = 1.0) override;
 		virtual void writeMeshFieldToPlt(std::ofstream &output_file) override;
 		bool isWithinCorePackage(Vecd position);
 		Real computeKernelIntegral(const Vecd &position);
 		Vecd computeKernelGradientIntegral(const Vecd &position);
+		Vecd computeStressKernelGradientIntegral(const Vecd& position);
 		Matd computeKernelSecondGradientIntegral(const Vecd &position);
 		Matd computeDisplacementKernelGradientIntegral(const Vecd& position);
 
@@ -115,6 +118,7 @@ namespace SPH
 		DiscreteVariable<Vecd> phi_gradient_;
 		DiscreteVariable<Real> kernel_weight_;
 		DiscreteVariable<Vecd> kernel_gradient_;
+		DiscreteVariable<Vecd> stress_kernel_gradient_;
 		DiscreteVariable<Matd> kernel_second_gradient_;
 		DiscreteVariable<Matd> displacement_kernel_gradient_;
 		Kernel &kernel_;
@@ -180,6 +184,7 @@ namespace SPH
 		virtual Vecd probeLevelSetGradient(const Vecd &position) override;
 		virtual Real probeKernelIntegral(const Vecd &position, Real h_ratio = 1.0) override;
 		virtual Vecd probeKernelGradientIntegral(const Vecd &position, Real h_ratio = 1.0) override;
+		virtual Vecd probeStressKernelGradientIntegral(const Vecd& position, Real h_ratio = 1.0) override;
 		virtual Matd probeKernelSecondGradientIntegral(const Vecd& position, Real h_ratio = 1.0) override;
 		virtual Matd probeDisplacementKernelGradientIntegral(const Vecd& position, Real h_ratio = 1.0) override;
 

@@ -8,9 +8,9 @@ using namespace SPH;
 //----------------------------------------------------------------------
 //	Basic geometry parameters and numerical setup.
 //----------------------------------------------------------------------
-Real LL = 1.0;					
+Real LL = 1.5;					
 Real LH = 1.0;
-Real resolution_ref = LL / 40.0;
+Real resolution_ref = LL / 20.0;
 Real BW = resolution_ref * 2.0;
 BoundingBox system_domain_bounds(Vec2d(-BW - LL, -BW - LH), Vec2d(LL+ BW, LH + BW));
 //----------------------------------------------------------------------
@@ -65,16 +65,38 @@ int main(int ac, char *av[])
 		BodyStatesRecordingToVtp write_insert_body_to_vtp(io_environment, {&body});
 		/** Write the particle reload files. */
 		ReloadParticleIO write_particle_reload_files(io_environment, {&body});
-		/** A  Physics relaxation step. */
-		relax_dynamics::RelaxationEvolutionInner relaxation_inner_implicit(insert_body_inner);
-		relax_dynamics::RelaxationStepInner relaxation_inner_explicit(insert_body_inner);
-		InteractionDynamics<relax_dynamics::UpdateParticleKineticEnergy> update_kinetic_energy(insert_body_inner);
-		ReduceAverage<QuantitySummation<Real>> average_residue(body, "residue");
-		body.addBodyStateForRecording<Real>("residue");
-		relax_dynamics::ModificationStepForConsistency modification_step_for_consistency(insert_body_inner);
+
+		/** An relaxation process include 0th and 1st order consistency. */
+		InteractionDynamics<relax_dynamics::CalculateParticleStress> calculate_particle_stress(insert_body_inner);
+		relax_dynamics::RelaxationStepInner relaxation_0th_inner(insert_body_inner);
+		relax_dynamics::RelaxationEvolutionInner relaxation_0th_implicit_inner(insert_body_inner);
+		relax_dynamics::RelaxationStepFirstOrderInner relaxation_1st_inner(insert_body_inner);
+		relax_dynamics::RelaxationFirstOrderEvolutionInner relaxation_1st_implicit_inner(insert_body_inner);
 
 		PeriodicConditionUsingCellLinkedList periodic_condition_x(body, body.getBodyShapeBounds(), xAxis);
 		PeriodicConditionUsingCellLinkedList periodic_condition_y(body, body.getBodyShapeBounds(), yAxis);
+
+		/** Update relaxation residue. */
+		InteractionDynamics<relax_dynamics::UpdateParticleKineticEnergy>
+			update_kinetic_energy(insert_body_inner);
+		ReducedQuantityRecording<ReduceAverage<QuantitySummation<Real>>>
+			write_particle_averaged_kinetic_energy(io_environment, body, "particle_kinetic_energy");
+		ReducedQuantityRecording<ReduceDynamics<QuantityMaximum<Real>>>
+			write_particle_maximum_kinetic_energy(io_environment, body, "particle_kinetic_energy");
+
+		InteractionDynamics<relax_dynamics::CheckZeroOrderConsistency>
+			check_zero_order_consistency(insert_body_inner);
+		ReducedQuantityRecording<ReduceAverage<QuantitySummation<Real>>>
+			write_particle_averaged_zero_order_consisitency(io_environment, body, "unit_zero_order");
+		ReducedQuantityRecording<ReduceDynamics<QuantityMaximum<Real>>>
+			write_particle_maximum_zero_order_consisitency(io_environment, body, "unit_zero_order");
+
+		InteractionDynamics<relax_dynamics::CheckFirstOrderConsistency>
+			check_first_order_consistency(insert_body_inner);
+		ReducedQuantityRecording<ReduceAverage<QuantitySummation<Real>>>
+			write_particle_averaged_first_order_consisitency(io_environment, body, "first_order");
+		ReducedQuantityRecording<ReduceDynamics<QuantityMaximum<Real>>>
+			write_particle_maximum_first_order_consisitency(io_environment, body, "first_order");
 		//----------------------------------------------------------------------
 		//	Particle relaxation starts here.
 		//----------------------------------------------------------------------
@@ -83,44 +105,68 @@ int main(int ac, char *av[])
 		periodic_condition_x.update_cell_linked_list_.parallel_exec();
 		periodic_condition_y.update_cell_linked_list_.parallel_exec();
 		sph_system.initializeSystemConfigurations();
-		relaxation_inner_explicit.SurfaceBounding().parallel_exec();
 		write_insert_body_to_vtp.writeToFile(0);
 		//----------------------------------------------------------------------
 		//	Relax particles of the insert body.
 		//----------------------------------------------------------------------
-		std::string filefullpath_residue = io_environment.output_folder_ + "/" + "residue.dat";
-		std::ofstream out_file_residue(filefullpath_residue.c_str(), std::ios::app);
-
+		tick_count t1 = tick_count::now();
 		int ite_p = 0;
-		Real dt = 1.0 / 200.0; 
-		while (ite_p < 2000)
+		GlobalStaticVariables::physical_time_ = ite_p;
+		while (ite_p < 10000)
 		{
-			periodic_condition_x.bounding_.parallel_exec();
 			periodic_condition_y.bounding_.parallel_exec();
+			periodic_condition_x.bounding_.parallel_exec();
 			body.updateCellLinkedList();
-			periodic_condition_x.update_cell_linked_list_.parallel_exec();
 			periodic_condition_y.update_cell_linked_list_.parallel_exec();
+			periodic_condition_x.update_cell_linked_list_.parallel_exec();
 			insert_body_inner.updateConfiguration();
-			relaxation_inner_explicit.parallel_exec(dt);
 
-			if (ite_p == 0)
+			//relaxation_0th_inner.parallel_exec();
+			//relaxation_0th_implicit_inner.parallel_exec(0.1);
+			calculate_particle_stress.parallel_exec();
+			relaxation_1st_inner.parallel_exec();
+			//relaxation_1st_implicit_inner.parallel_exec(0.1);
+			
+			periodic_condition_y.bounding_.parallel_exec();
+			periodic_condition_x.bounding_.parallel_exec();
+			body.updateCellLinkedList();
+			
+			periodic_condition_y.update_cell_linked_list_.parallel_exec();
+			periodic_condition_x.update_cell_linked_list_.parallel_exec();
+			insert_body_inner.updateConfiguration();
+
+			if (ite_p % 10 == 0)
 			{
 				update_kinetic_energy.parallel_exec();
-				out_file_residue << std::fixed << std::setprecision(12) << 0 << "   " << average_residue.parallel_exec() << "\n";
+				write_particle_averaged_kinetic_energy.writeToFile(ite_p);
+				write_particle_maximum_kinetic_energy.writeToFile(ite_p);
+
+				check_zero_order_consistency.parallel_exec();
+				write_particle_averaged_zero_order_consisitency.writeToFile(ite_p);
+				write_particle_maximum_zero_order_consisitency.writeToFile(ite_p);
+
+				check_first_order_consistency.parallel_exec();
+				write_particle_averaged_first_order_consisitency.writeToFile(ite_p);
+				write_particle_maximum_first_order_consisitency.writeToFile(ite_p);
 			}
-			
+
 			ite_p += 1;
-			if (ite_p % 50 == 0)
+			GlobalStaticVariables::physical_time_ = ite_p;
+
+			if (ite_p % 10 == 0)
 			{
 				std::cout << std::fixed << std::setprecision(9) << "Relaxation steps for the inserted body N = " << ite_p << "\n";
-				update_kinetic_energy.parallel_exec();
-				out_file_residue << std::fixed << std::setprecision(12) << ite_p << "   " << average_residue.parallel_exec() << "\n";
 				write_insert_body_to_vtp.writeToFile(ite_p);
 			}
 		}
-		std::cout << "The physics relaxation process of inserted body finish !" << std::endl;
+		std::cout << "The physical relaxation process of body finish !" << std::endl;
+
 		/** Output results. */
 		write_particle_reload_files.writeToFile(0);
+		tick_count t2 = tick_count::now();
+		tick_count::interval_t tt;
+		tt = t2 - t1;
+		std::cout << "Total wall time for computation: " << tt.seconds() << " seconds." << std::endl;
 		return 0;
 	}
 }
