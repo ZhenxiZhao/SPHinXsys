@@ -10,7 +10,7 @@
  *																			*
  * SPHinXsys is partially funded by German Research Foundation				*
  * (Deutsche Forschungsgemeinschaft) DFG HU1527/6-1, HU1527/10-1,			*
- *  HU1527/12-1 and HU1527/12-4													*
+ *  HU1527/12-1 and HU1527/12-4												*
  *                                                                          *
  * Portions copyright (c) 2017-2022 Technical University of Munich and		*
  * the authors' affiliations.												*
@@ -21,14 +21,55 @@
  *                                                                          *
  * ------------------------------------------------------------------------*/
 /**
- * @file    all_particle_dynamics.h
- * @brief   Head file for all particle dynamics. 
- * @author	Chi ZHang and Xiangyu Hu
+ * @file 	execution_policy.h
+ * @brief 	Here we define the execution policy relevant to parallel computing.
+ * @details This analog of the standard library on the same functions.
+ * @author	Xiangyu Hu
  */
 
-#ifndef ALL_PARTICLE_DYNAMICS_H
-#define ALL_PARTICLE_DYNAMICS_H
+#ifndef EXECUTION_POLICY_H
+#define EXECUTION_POLICY_H
 
-#include "particle_dynamics_algorithms.h"
+namespace SPH
+{
+    namespace execution
+    {
+        class SequencedPolicy
+        {
+        public:
+            inline constexpr static SequencedPolicy generatePolicy()
+            {
+                return SequencedPolicy{};
+            };
+        };
 
-#endif //ALL_PARTICLE_DYNAMICS_H
+        class UnsequencedPolicy
+        {
+        public:
+            inline constexpr static UnsequencedPolicy generatePolicy()
+            {
+                return UnsequencedPolicy{};
+            };
+        };
+
+        class ParallelPolicy
+        {
+        public:
+            inline constexpr static ParallelPolicy generatePolicy()
+            {
+                return ParallelPolicy{};
+            };
+        };
+
+        class ParallelUnsequencedPolicy
+        {
+        public:
+            inline constexpr static ParallelUnsequencedPolicy generatePolicy()
+            {
+
+                return ParallelUnsequencedPolicy{};
+            };
+        };
+    }
+}
+#endif // EXECUTION_POLICY_H

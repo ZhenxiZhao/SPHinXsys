@@ -94,7 +94,7 @@ int main(int ac, char *av[])
 	water_block.generateParticles<ParticleGeneratorSplitAndMerge>();
 	water_block.addBodyStateForRecording<Real>("SmoothingLengthRatio");
 	water_block.addBodyStateForRecording<Real>("VolumetricMeasure");
-	
+
 	SolidBody wall_boundary(sph_system, makeShared<WallBoundary>("WallBoundary"));
 	wall_boundary.defineParticlesAndMaterial<SolidParticles, Solid>();
 	wall_boundary.generateParticles<ParticleGeneratorLattice>();
@@ -116,8 +116,8 @@ int main(int ac, char *av[])
 	Dynamics1Level<fluid_dynamics::Integration2ndHalfRiemannWithWall> fluid_density_relaxation(water_complex);
 
 	MultiPolygonShape split_merge_region(createRefinementArea());
-	InteractionWithUpdate<SplitWithMinimumDensityErrorWithWall> particle_split_(water_complex, split_merge_region, 8000);
-	InteractionDynamics<MergeWithMinimumDensityErrorWithWall> particle_merge_(water_complex, split_merge_region);
+	InteractionWithUpdate<SplitWithMinimumDensityErrorWithWall, SequencedPolicy> particle_split_(water_complex, split_merge_region, 8000);
+	InteractionDynamics<MergeWithMinimumDensityErrorWithWall, SequencedPolicy> particle_merge_(water_complex, split_merge_region);
 	InteractionWithUpdate<fluid_dynamics::DensitySummationFreeSurfaceComplexAdaptive> fluid_density_by_summation(water_complex);
 
 	SimpleDynamics<NormalDirectionFromBodyShape> wall_boundary_normal_direction(wall_boundary);
@@ -141,7 +141,7 @@ int main(int ac, char *av[])
 	//----------------------------------------------------------------------
 	sph_system.initializeSystemCellLinkedLists();
 	sph_system.initializeSystemConfigurations();
-	wall_boundary_normal_direction.parallel_exec();
+	wall_boundary_normal_direction.exec();
 	//----------------------------------------------------------------------
 	//	Setup for time-stepping control
 	//----------------------------------------------------------------------
@@ -178,9 +178,9 @@ int main(int ac, char *av[])
 		{
 			/** outer loop for dual-time criteria time-stepping. */
 			time_instance = TickCount::now();
-			fluid_step_initialization.parallel_exec();
-			Real Dt = fluid_advection_time_step.parallel_exec();
-			fluid_density_by_summation.parallel_exec();
+			fluid_step_initialization.exec();
+			Real Dt = fluid_advection_time_step.exec();
+			fluid_density_by_summation.exec();
 			interval_computing_time_step += TickCount::now() - time_instance;
 
 			time_instance = TickCount::now();
@@ -188,9 +188,9 @@ int main(int ac, char *av[])
 			while (relaxation_time < Dt)
 			{
 				/** inner loop for dual-time criteria time-stepping.  */
-				fluid_pressure_relaxation.parallel_exec(dt);
-				fluid_density_relaxation.parallel_exec(dt);
-				dt = fluid_acoustic_time_step.parallel_exec();
+				fluid_pressure_relaxation.exec(dt);
+				fluid_density_relaxation.exec(dt);
+				dt = fluid_acoustic_time_step.exec();
 				relaxation_time += dt;
 				integration_time += dt;
 				GlobalStaticVariables::physical_time_ += dt;
