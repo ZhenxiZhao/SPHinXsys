@@ -37,9 +37,8 @@ namespace SPH
 	namespace fluid_dynamics
 	{
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void DensitySummationInner::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
 			Real sigma = W0_;
 			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
@@ -49,9 +48,8 @@ namespace SPH
 			rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void DensitySummationInnerAdaptive::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
 			Real sigma_i = mass_[index_i] * kernel_.W0(h_ratio_[index_i], ZeroVecd);
 			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
@@ -62,9 +60,8 @@ namespace SPH
 								sph_adaptation_.ReferenceNumberDensity(h_ratio_[index_i]);
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void ViscousAccelerationInner::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
 			Vecd acceleration = Vecd::Zero();
 			Vecd vel_derivative = Vecd::Zero();
@@ -81,9 +78,8 @@ namespace SPH
 			acc_prior_[index_i] += acceleration / rho_[index_i];
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void AngularConservativeViscousAccelerationInner::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
 			Vecd acceleration = Vecd::Zero();
 			Neighborhood &inner_neighborhood = inner_configuration_[index_i];
@@ -103,9 +99,8 @@ namespace SPH
 			acc_prior_[index_i] += acceleration / rho_[index_i];
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void TransportVelocityCorrectionInner::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
 			Vecd acceleration_trans = Vecd::Zero();
 			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
@@ -121,8 +116,7 @@ namespace SPH
 				pos_[index_i] += coefficient_ * smoothing_length_sqr_ * acceleration_trans;
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
-		void VorticityInner::interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+		void VorticityInner::interaction(size_t index_i, Real dt)
 		{
 			AngularVecd vorticity = ZeroData<AngularVecd>::value;
 			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
@@ -137,11 +131,10 @@ namespace SPH
 			vorticity_[index_i] = vorticity;
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void Oldroyd_BIntegration1stHalf::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
-			Integration1stHalfDissipativeRiemann::interaction(execution_policy, index_i, dt);
+			Integration1stHalfDissipativeRiemann::interaction(index_i, dt);
 
 			Vecd acceleration = Vecd::Zero();
 			Neighborhood &inner_neighborhood = inner_configuration_[index_i];
@@ -157,9 +150,8 @@ namespace SPH
 			acc_[index_i] += acceleration / rho_[index_i];
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void TransportVelocityCorrectionInnerAdaptive::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
 			Vecd acceleration_trans = Vecd::Zero();
 			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
@@ -178,11 +170,10 @@ namespace SPH
 			}
 		}
 		//=================================================================================================//
-		template <class ExecutionPolicy>
 		void Oldroyd_BIntegration2ndHalf::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+			interaction(size_t index_i, Real dt)
 		{
-			Integration2ndHalfDissipativeRiemann::interaction(execution_policy, index_i, dt);
+			Integration2ndHalfDissipativeRiemann::interaction(index_i, dt);
 
 			Matd tau_i = tau_[index_i];
 			Matd stress_rate = Matd::Zero();
@@ -235,61 +226,21 @@ namespace SPH
 		}
 		//=================================================================================================//
 		template <class RiemannSolverType>
-		template <class ExecutionPolicy>
 		void BaseIntegration1stHalf<RiemannSolverType>::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+		interaction(size_t index_i, Real dt)
 		{
-			Neighborhood &ngh = inner_configuration_[index_i];
-
 			Vecd acceleration = Vecd::Zero();
 			Real rho_dissipation(0);
-			Real p_i = p_[index_i];
-			for (size_t n = 0; n != ngh.current_size_; ++n)
+			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
+			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
 			{
-				Real dW_ijV_j = ngh.dW_ijV_j_[n];
-				Real p_j = p_[ngh.j_[n]];
+				size_t index_j = inner_neighborhood.j_[n];
+				Real dW_ijV_j = inner_neighborhood.dW_ijV_j_[n];
+				const Vecd &e_ij = inner_neighborhood.e_ij_[n];
 
-				acceleration -= (p_i + p_j) * dW_ijV_j * ngh.e_ij_[n];
-				rho_dissipation += riemann_solver_.DissipativeUJump(p_i - p_j) * dW_ijV_j;
+				acceleration -= (p_[index_i] + p_[index_j]) * dW_ijV_j * e_ij;
+				rho_dissipation += riemann_solver_.DissipativeUJump(p_[index_i] - p_[index_j]) * dW_ijV_j;
 			}
-
-			acc_[index_i] += acceleration / rho_[index_i];
-			drho_dt_[index_i] = rho_dissipation * rho_[index_i];
-		}
-		//=================================================================================================//
-		template <class RiemannSolverType>
-		void BaseIntegration1stHalf<RiemannSolverType>::
-			interaction(const UnsequencedPolicy &parallel_unsequenced_policy, size_t index_i, Real dt)
-		{
-			Neighborhood &ngh = inner_configuration_[index_i];
-			size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
-
-			VecdX x_acceleration = VecdX::Zero();
-			RealX x_rho_dissipation(0);
-			RealX x_p_i = RealX(p_[index_i]);
-			size_t batch_index = 0;
-			for (size_t n = 0; n < floor_size; n += XsimdSize)
-			{
-				const RealX &x_dW_ijV_j = ngh.x_dW_ijV_j_[batch_index];
-				RealX x_p_j = gatherRealX<XsimdSize>(p_, &ngh.j_[n]);
-
-				x_acceleration -= (x_p_i + x_p_j) * x_dW_ijV_j * ngh.x_e_ij_[batch_index];
-				x_rho_dissipation += riemann_solver_.DissipativeUJump(x_p_i - x_p_j) * x_dW_ijV_j;
-				batch_index++;
-			}
-
-			Vecd acceleration = reduceVecdX(x_acceleration);
-			Real rho_dissipation = reduceRealX(x_rho_dissipation);
-			Real p_i = p_[index_i];
-			for (size_t n = floor_size; n != ngh.current_size_; ++n)
-			{
-				Real dW_ijV_j = ngh.dW_ijV_j_[n];
-				Real p_j = p_[ngh.j_[n]];
-
-				acceleration -= (p_i + p_j) * dW_ijV_j * ngh.e_ij_[n];
-				rho_dissipation += riemann_solver_.DissipativeUJump(p_i - p_j) * dW_ijV_j;
-			}
-
 			acc_[index_i] += acceleration / rho_[index_i];
 			drho_dt_[index_i] = rho_dissipation * rho_[index_i];
 		}
@@ -313,64 +264,22 @@ namespace SPH
 		}
 		//=================================================================================================//
 		template <class RiemannSolverType>
-		template <class ExecutionPolicy>
 		void BaseIntegration2ndHalf<RiemannSolverType>::
-			interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt)
+		interaction(size_t index_i, Real dt)
 		{
-			Neighborhood &ngh = inner_configuration_[index_i];
-
 			Real density_change_rate(0);
 			Vecd p_dissipation = Vecd::Zero();
-			const Vecd &vel_i = vel_[index_i];
-			for (size_t n = 0; n != ngh.current_size_; ++n)
+			const Neighborhood &inner_neighborhood = inner_configuration_[index_i];
+			for (size_t n = 0; n != inner_neighborhood.current_size_; ++n)
 			{
-				Real dW_ijV_j = ngh.dW_ijV_j_[n];
-				const Vecd &e_ij = ngh.e_ij_[n];
+				size_t index_j = inner_neighborhood.j_[n];
+				const Vecd &e_ij = inner_neighborhood.e_ij_[n];
+				Real dW_ijV_j = inner_neighborhood.dW_ijV_j_[n];
 
-				Real u_jump = (vel_i - vel_[ngh.j_[n]]).dot(e_ij);
+				Real u_jump = (vel_[index_i] - vel_[index_j]).dot(e_ij);
 				density_change_rate += u_jump * dW_ijV_j;
 				p_dissipation += riemann_solver_.DissipativePJump(u_jump) * dW_ijV_j * e_ij;
 			}
-
-			drho_dt_[index_i] += density_change_rate * rho_[index_i];
-			acc_[index_i] = p_dissipation / rho_[index_i];
-		};
-		//=================================================================================================//
-		template <class RiemannSolverType>
-		void BaseIntegration2ndHalf<RiemannSolverType>::
-			interaction(const UnsequencedPolicy &execution_policy, size_t index_i, Real dt)
-		{
-			Neighborhood &ngh = inner_configuration_[index_i];
-			size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
-
-			RealX x_density_change_rate(0);
-			VecdX x_p_dissipation = VecdX::Zero();
-			VecdX x_vel_i = assignVecdX(vel_[index_i]);
-			size_t batch_index = 0;
-			for (size_t n = 0; n < floor_size; n += XsimdSize)
-			{
-				const RealX &x_dW_ijV_j = ngh.x_dW_ijV_j_[batch_index];
-				const VecdX &x_e_ij = ngh.x_e_ij_[batch_index];
-
-				RealX x_u_jump = (x_vel_i - gatherVecdX<XsimdSize>(vel_, &ngh.j_[n])).dot(x_e_ij);
-				x_density_change_rate += x_u_jump * x_dW_ijV_j;
-				x_p_dissipation += riemann_solver_.DissipativePJump(x_u_jump) * x_dW_ijV_j * x_e_ij;
-				batch_index++;
-			}
-
-			Real density_change_rate = reduceRealX(x_density_change_rate);
-			Vecd p_dissipation = reduceVecdX(x_p_dissipation);
-			const Vecd &vel_i = vel_[index_i];
-			for (size_t n = floor_size; n != ngh.current_size_; ++n)
-			{
-				Real dW_ijV_j = ngh.dW_ijV_j_[n];
-				const Vecd &e_ij = ngh.e_ij_[n];
-
-				Real u_jump = (vel_i - vel_[ngh.j_[n]]).dot(e_ij);
-				density_change_rate += u_jump * dW_ijV_j;
-				p_dissipation += riemann_solver_.DissipativePJump(u_jump) * dW_ijV_j * e_ij;
-			}
-
 			drho_dt_[index_i] += density_change_rate * rho_[index_i];
 			acc_[index_i] = p_dissipation / rho_[index_i];
 		};

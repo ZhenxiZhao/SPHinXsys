@@ -22,8 +22,9 @@
  * ------------------------------------------------------------------------*/
 /**
  * @file 	execution_policy.h
- * @brief 	This is for the base functions for particle iterator.
- * @author	Chi ZHang and Xiangyu Hu
+ * @brief 	Here we define the execution policy relevant to parallel computing.
+ * @details This analog of the standard library on the same functions.
+ * @author	Xiangyu Hu
  */
 
 #ifndef EXECUTION_POLICY_H
@@ -35,24 +36,40 @@ namespace SPH
     {
         class SequencedPolicy
         {
+        public:
+            inline constexpr static SequencedPolicy generatePolicy()
+            {
+                return SequencedPolicy{};
+            };
         };
 
         class UnsequencedPolicy
         {
+        public:
+            inline constexpr static UnsequencedPolicy generatePolicy()
+            {
+                return UnsequencedPolicy{};
+            };
         };
 
         class ParallelPolicy
         {
+        public:
+            inline constexpr static ParallelPolicy generatePolicy()
+            {
+                return ParallelPolicy{};
+            };
         };
 
         class ParallelUnsequencedPolicy
         {
-        };
+        public:
+            inline constexpr static ParallelUnsequencedPolicy generatePolicy()
+            {
 
-        inline constexpr SequencedPolicy seq{};
-        inline constexpr UnsequencedPolicy unseq{};
-        inline constexpr ParallelPolicy par{};
-        inline constexpr ParallelUnsequencedPolicy par_unseq{};
+                return ParallelUnsequencedPolicy{};
+            };
+        };
     }
 }
 #endif // EXECUTION_POLICY_H

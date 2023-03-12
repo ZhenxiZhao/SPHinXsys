@@ -88,30 +88,10 @@ namespace SPH
 			explicit DensitySummationInner(BaseInnerRelation &inner_relation);
 			virtual ~DensitySummationInner(){};
 
-			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0)
-			{
-				Neighborhood &ngh = inner_configuration_[index_i];
-
-				RealX x_sigma(0.0);
-				size_t floor_size = ngh.current_size_ - ngh.current_size_ % XsimdSize;
-				for (size_t n = 0; n < floor_size; n += XsimdSize)
-				{
-					x_sigma += loadRealX(&ngh.W_ij_[n]);
-				}
-
-				Real sigma = W0_ + reduceRealX(x_sigma);
-				for (size_t n = floor_size; n != ngh.current_size_; ++n)
-					sigma += ngh.W_ij_[n];
-
-				rho_sum_[index_i] = sigma * rho0_ * inv_sigma0_;
-			};
-
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 		protected:
-			Real W0_,
-				inv_sigma0_;
+			Real W0_, inv_sigma0_;
 		};
 
 		/**
@@ -124,8 +104,7 @@ namespace SPH
 			explicit DensitySummationInnerAdaptive(BaseInnerRelation &inner_relation);
 			virtual ~DensitySummationInnerAdaptive(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 		protected:
 			SPHAdaptation &sph_adaptation_;
@@ -161,8 +140,7 @@ namespace SPH
 				: BaseViscousAccelerationInner(inner_relation){};
 			virtual ~ViscousAccelerationInner(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 		};
 
 		/**
@@ -177,8 +155,7 @@ namespace SPH
 				: BaseViscousAccelerationInner(inner_relation){};
 			virtual ~AngularConservativeViscousAccelerationInner(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 		};
 
 		/**
@@ -191,8 +168,7 @@ namespace SPH
 			explicit TransportVelocityCorrectionInner(BaseInnerRelation &inner_relation, Real coefficient = 0.2);
 			virtual ~TransportVelocityCorrectionInner(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 		protected:
 			StdLargeVec<Vecd> &pos_;
@@ -211,8 +187,7 @@ namespace SPH
 			explicit TransportVelocityCorrectionInnerAdaptive(BaseInnerRelation &inner_relation, Real coefficient = 0.2);
 			virtual ~TransportVelocityCorrectionInnerAdaptive(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 		protected:
 			SPHAdaptation &sph_adaptation_;
@@ -288,8 +263,7 @@ namespace SPH
 			explicit VorticityInner(BaseInnerRelation &inner_relation);
 			virtual ~VorticityInner(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 		protected:
 			StdLargeVec<Vecd> &vel_;
@@ -326,10 +300,7 @@ namespace SPH
 			RiemannSolverType riemann_solver_;
 			void initialization(size_t index_i, Real dt = 0.0);
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
-
-			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 			void update(size_t index_i, Real dt = 0.0);
 
@@ -354,10 +325,7 @@ namespace SPH
 			RiemannSolverType riemann_solver_;
 			void initialization(size_t index_i, Real dt = 0.0);
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
-
-			inline void interaction(const UnsequencedPolicy &unsequenced_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 			void update(size_t index_i, Real dt = 0.0);
 
@@ -380,8 +348,7 @@ namespace SPH
 			virtual ~Oldroyd_BIntegration1stHalf(){};
 			void initialization(size_t index_i, Real dt = 0.0);
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 		protected:
 			StdLargeVec<Matd> &tau_, &dtau_dt_;
@@ -397,8 +364,7 @@ namespace SPH
 			explicit Oldroyd_BIntegration2ndHalf(BaseInnerRelation &inner_relation);
 			virtual ~Oldroyd_BIntegration2ndHalf(){};
 
-			template <class ExecutionPolicy>
-			inline void interaction(const ExecutionPolicy &execution_policy, size_t index_i, Real dt = 0.0);
+			inline void interaction(size_t index_i, Real dt = 0.0);
 
 			void update(size_t index_i, Real dt = 0.0);
 
