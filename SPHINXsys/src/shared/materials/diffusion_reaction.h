@@ -171,7 +171,7 @@ namespace SPH
 		StdVec<ReactionFunctor> get_loss_rates_;
 
 		explicit BaseReactionModel(SpeciesNames species_name_list)
-			:  reaction_model_("BaseReactionModel"), species_name_list_(species_name_list) 
+			: reaction_model_("BaseReactionModel"), species_name_list_(species_name_list)
 		{
 			for (size_t i = 0; i != species_name_list.size(); ++i)
 			{
@@ -187,6 +187,16 @@ namespace SPH
 		std::map<std::string, size_t> species_indexes_map_;
 	};
 
+	template <>
+	class BaseReactionModel<0>
+	{
+	public:
+		BaseReactionModel() : reaction_model_("EmptyReactionModel"){};
+
+	protected:
+		std::string reaction_model_;
+	};
+	
 	/**
 	 * @class DiffusionReaction
 	 * @brief Complex material for diffusion or/and reactions.
