@@ -5,10 +5,6 @@ namespace SPH
 	//=================================================================================================//
 	void ElectroPhysiologyReaction::initializeElectroPhysiologyReaction()
 	{
-		reactive_species_.push_back(voltage_);
-		reactive_species_.push_back(gate_variable_);
-		reactive_species_.push_back(active_contraction_stress_);
-
 		get_production_rates_.push_back(std::bind(&ElectroPhysiologyReaction::getProductionRateIonicCurrent, this, _1));
 		get_production_rates_.push_back(std::bind(&ElectroPhysiologyReaction::getProductionRateGateVariable, this, _1));
 		get_production_rates_.push_back(std::bind(&ElectroPhysiologyReaction::getProductionActiveContractionStress, this, _1));

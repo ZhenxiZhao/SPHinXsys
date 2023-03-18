@@ -96,55 +96,47 @@ namespace SPH
 	 * @class MonoFieldElectroPhysiology
 	 * @brief material class for electro_physiology.
 	 */
-	class MonoFieldElectroPhysiology : public DiffusionReaction<Solid, 3>
+	template <class ElectroPhysiologyReactionType>
+	class MonoFieldElectroPhysiology : public DiffusionReaction<Solid, ElectroPhysiologyReactionType>
 	{
 	public:
-		explicit MonoFieldElectroPhysiology(ElectroPhysiologyReaction &electro_physiology_reaction,
-											Real diff_cf, Real bias_diff_cf, Vecd bias_direction);
+		template <class DiffusionType, typename... DiffusionArgs, typename... ReactionArgs>
+		MonoFieldElectroPhysiology(DiffusionArgs &&...diffusion_args, ReactionArgs &&...reaction_args)
+			: DiffusionReaction<Solid, ElectroPhysiologyReactionType>(
+				  {"Voltage", "GateVariable", "ActiveContractionStress"}, std::forward<ReactionArgs>(reaction_args)...)
+		{
+			material_type_name_ = "MonoFieldElectroPhysiology";
+			initializeAnDiffusion<DiffusionType>("Voltage", "Voltage", std::forward<DiffusionArgs>(diffusion_args)...);
+		};
 		virtual ~MonoFieldElectroPhysiology(){};
-	};
-
-	/**
-	 * @class LocalMonoFieldElectroPhysiology
-	 * @brief material class for electro_physiology with locally oriented fibers.
-	 */
-	class LocalMonoFieldElectroPhysiology : public DiffusionReaction<Solid, 3>
-	{
-	public:
-		explicit LocalMonoFieldElectroPhysiology(ElectroPhysiologyReaction &electro_physiology_reaction,
-												 Real diff_cf, Real bias_diff_cf, Vecd bias_direction);
-		virtual ~LocalMonoFieldElectroPhysiology(){};
-
-		virtual void readFromXmlForLocalParameters(const std::string &filefullpath) override;
 	};
 
 	/**
 	 * @class ElectroPhysiologyParticles
 	 * @brief A group of particles with electrophysiology particle data.
 	 */
-	class ElectroPhysiologyParticles
-		: public DiffusionReactionParticles<SolidParticles, Solid, 3>
-	{
-	public:
-		ElectroPhysiologyParticles(SPHBody &sph_body, DiffusionReaction<Solid, 3> *diffusion_reaction_material);
-		virtual ~ElectroPhysiologyParticles(){};
-		virtual ElectroPhysiologyParticles *ThisObjectPtr() override { return this; };
-	};
+	template <class ElectroPhysiologyReactionType>
+	using ElectroPhysiologyParticles =
+		DiffusionReactionParticles<SolidParticles, MonoFieldElectroPhysiology<ElectroPhysiologyReactionType>>;
 	/**
 	 * @class ElectroPhysiologyReducedParticles
 	 * @brief A group of reduced particles with electrophysiology particle data.
 	 */
+	template <class ElectroPhysiologyReactionType>
 	class ElectroPhysiologyReducedParticles
-		: public DiffusionReactionParticles<SolidParticles, Solid, 3>
+		: public DiffusionReactionParticles<SolidParticles, MonoFieldElectroPhysiology<ElectroPhysiologyReactionType>>;
 	{
 	public:
 		/** Constructor. */
-		ElectroPhysiologyReducedParticles(SPHBody &sph_body, DiffusionReaction<Solid, 3> *diffusion_reaction_material);
+		ElectroPhysiologyReducedParticles(SPHBody & sph_body,
+										  MonoFieldElectroPhysiology<ElectroPhysiologyReactionType> * diffusion_reaction_material)
+			: DiffusionReactionParticles<SolidParticles, MonoFieldElectroPhysiology<ElectroPhysiologyReactionType>>(
+				sph_body, diffusion_reaction_material){};
 		/** Destructor. */
 		virtual ~ElectroPhysiologyReducedParticles(){};
-		virtual ElectroPhysiologyReducedParticles *ThisObjectPtr() override { return this; };
+		virtual ElectroPhysiologyReducedParticles<ElectroPhysiologyReactionType> *ThisObjectPtr() override { return this; };
 
-		virtual Vecd getKernelGradient(size_t particle_index_i, size_t particle_index_j, Real dW_ijV_j, Vecd &e_ij) override
+		virtual Vecd getKernelGradient(size_t particle_index_i, size_t particle_index_j, Real dW_ijV_j, Vecd & e_ij) override
 		{
 			return dW_ijV_j * e_ij;
 		};
@@ -152,7 +144,7 @@ namespace SPH
 
 	namespace electro_physiology
 	{
-		typedef DiffusionReactionSimpleData<SolidParticles, Solid, 3> ElectroPhysiologyDataDelegateSimple;
+		typedef DiffusionReactionSimpleData<ElectroPhysiologyParticles<ElectroPhysiologyReactionType>> ElectroPhysiologyDataDelegateSimple;
 		typedef DiffusionReactionInnerData<SolidParticles, Solid, 3> ElectroPhysiologyDataDelegateInner;
 		/**
 		 * @class ElectroPhysiologyInitialCondition
