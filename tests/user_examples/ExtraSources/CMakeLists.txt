@@ -1,0 +1,4 @@
+add_library(extra_sources_module extra_sources/fluid_boundary_static_confinement.cpp extra_sources/fluid_boundary_static_confinement.h)
+target_include_directories(extra_sources_module PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/extra_sources> $<INSTALL_INTERFACE:include/extra_sources>)
+target_link_libraries(extra_sources_module PUBLIC sphinxsys_2d)
+target_link_libraries(extra_sources_module PUBLIC sphinxsys_3d)
