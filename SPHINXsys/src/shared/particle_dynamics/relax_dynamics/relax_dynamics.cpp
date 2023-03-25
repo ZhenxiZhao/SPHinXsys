@@ -97,9 +97,9 @@ namespace SPH
 		//=================================================================================================//
 		void NearSurfaceVolumeCorrection::update(size_t index_i, Real dt)
 		{
-			Real phi = level_set_shape_->findSignedDistance(pos_[index_i]);
 			Real particle_spacing = sph_adaptation_->getLocalSpacing(*level_set_shape_, pos_[index_i]);
-			Vol_[index_i] = pow(particle_spacing, Dimensions) * (1.0 - Heaviside(phi, 0.5 * particle_spacing));
+			Real overlap = level_set_shape_->computeKernelIntegral(pos_[index_i], sph_adaptation_->SmoothingLengthRatio(index_i));
+			Vol_[index_i] = pow(particle_spacing, Dimensions) * SMAX(0.5, (1.0 - overlap));
 		}
 		//=================================================================================================//
 		RelaxationStepInner::
@@ -113,13 +113,13 @@ namespace SPH
 			{
 				relaxation_acceleration_inner_ =
 					makeUnique<InteractionDynamics<RelaxationAccelerationInner>>(inner_relation);
-				surface_correction_ = makeShared<SimpleDynamics<NearSurfaceVolumeCorrection>>(near_shape_surface_);
+				surface_correction_ = makeShared<SimpleDynamics<ShapeSurfaceBounding>>(near_shape_surface_);
 			}
 			else
 			{
 				relaxation_acceleration_inner_ =
 					makeUnique<InteractionDynamics<RelaxationAccelerationInnerWithLevelSetCorrection>>(inner_relation);
-				surface_correction_ = makeShared<SimpleDynamics<ShapeSurfaceBounding>>(near_shape_surface_);
+				surface_correction_ = makeShared<SimpleDynamics<NearSurfaceVolumeCorrection>>(near_shape_surface_);
 			}
 		}
 		//=================================================================================================//
