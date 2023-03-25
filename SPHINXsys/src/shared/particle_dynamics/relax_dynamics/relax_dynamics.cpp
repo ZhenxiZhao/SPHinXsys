@@ -99,7 +99,7 @@ namespace SPH
 		{
 			Real phi = level_set_shape_->findSignedDistance(pos_[index_i]);
 			Real particle_spacing = sph_adaptation_->getLocalSpacing(*level_set_shape_, pos_[index_i]);
-			Vol_[index_i] *= 1.0 - Heaviside(phi, 0.5 * particle_spacing);
+			Vol_[index_i] = pow(particle_spacing, Dimensions) * (1.0 - Heaviside(phi, 0.5 * particle_spacing));
 		}
 		//=================================================================================================//
 		RelaxationStepInner::
