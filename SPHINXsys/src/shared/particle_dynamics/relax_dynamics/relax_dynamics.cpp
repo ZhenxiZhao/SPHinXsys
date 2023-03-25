@@ -89,6 +89,19 @@ namespace SPH
 			}
 		}
 		//=================================================================================================//
+		NearSurfaceVolumeCorrection::NearSurfaceVolumeCorrection(NearShapeSurface &near_shape_surface)
+			: BaseLocalDynamics<BodyPartByCell>(near_shape_surface),
+			  RelaxDataDelegateSimple(sph_body_), pos_(particles_->pos_), Vol_(particles_->Vol_),
+			  level_set_shape_(&near_shape_surface.level_set_shape_),
+			  sph_adaptation_(sph_body_.sph_adaptation_) {}
+		//=================================================================================================//
+		void NearSurfaceVolumeCorrection::update(size_t index_i, Real dt)
+		{
+			Real phi = level_set_shape_->findSignedDistance(pos_[index_i]);
+			Real particle_spacing = sph_adaptation_->getLocalSpacing(*level_set_shape_, pos_[index_i]);
+			Vol_[index_i] *= 1.0 - Heaviside(phi, 0.5 * particle_spacing);
+		}
+		//=================================================================================================//
 		RelaxationStepInner::
 			RelaxationStepInner(BaseInnerRelation &inner_relation, bool level_set_correction)
 			: BaseDynamics<void>(inner_relation.getSPHBody()), real_body_(inner_relation.real_body_),
@@ -100,11 +113,13 @@ namespace SPH
 			{
 				relaxation_acceleration_inner_ =
 					makeUnique<InteractionDynamics<RelaxationAccelerationInner>>(inner_relation);
+				surface_correction_ = makeShared<SimpleDynamics<NearSurfaceVolumeCorrection>>(near_shape_surface_);
 			}
 			else
 			{
 				relaxation_acceleration_inner_ =
 					makeUnique<InteractionDynamics<RelaxationAccelerationInnerWithLevelSetCorrection>>(inner_relation);
+				surface_correction_ = makeShared<SimpleDynamics<ShapeSurfaceBounding>>(near_shape_surface_);
 			}
 		}
 		//=================================================================================================//
@@ -115,7 +130,7 @@ namespace SPH
 			relaxation_acceleration_inner_->exec();
 			Real dt_square = get_time_step_square_.exec();
 			update_particle_position_.exec(dt_square);
-			surface_bounding_.exec();
+			surface_correction_->exec();
 		}
 		//=================================================================================================//
 		RelaxationAccelerationComplexWithLevelSetCorrection::

@@ -219,6 +219,25 @@ namespace SPH
 		};
 
 		/**
+		 * @class NearSurfaceVolumeCorrection
+		 * @brief
+		 */
+		class NearSurfaceVolumeCorrection : public BaseLocalDynamics<BodyPartByCell>,
+											public RelaxDataDelegateSimple
+		{
+		public:
+			NearSurfaceVolumeCorrection(NearShapeSurface &body_part);
+			virtual ~NearSurfaceVolumeCorrection(){};
+			void update(size_t index_i, Real dt = 0.0);
+
+		protected:
+			StdLargeVec<Vecd> &pos_;
+			StdLargeVec<Real> &Vol_;
+			LevelSetShape *level_set_shape_;
+			SPHAdaptation *sph_adaptation_;
+		};
+
+		/**
 		 * @class RelaxationStepInner
 		 * @brief carry out particle relaxation step of particles within the body
 		 */
@@ -228,7 +247,7 @@ namespace SPH
 			explicit RelaxationStepInner(BaseInnerRelation &inner_relation,
 										 bool level_set_correction = false);
 			virtual ~RelaxationStepInner(){};
-			SimpleDynamics<ShapeSurfaceBounding> &SurfaceBounding() { return surface_bounding_; };
+			BaseDynamics<void> &SurfaceBounding() { return surface_bounding_; };
 			virtual void exec(Real dt = 0.0) override;
 
 		protected:
@@ -239,6 +258,7 @@ namespace SPH
 			ReduceDynamics<GetTimeStepSizeSquare> get_time_step_square_;
 			SimpleDynamics<UpdateParticlePosition> update_particle_position_;
 			SimpleDynamics<ShapeSurfaceBounding> surface_bounding_;
+			SharedPtr<BaseDynamics<void>> surface_correction_;
 		};
 
 		/**
@@ -365,7 +385,7 @@ namespace SPH
 				explicit ConsistencyCorrection(BaseInnerRelation &inner_relation, Real consistency_criterion);
 				virtual ~ConsistencyCorrection(){};
 
-					inline void interaction(size_t index_i, Real dt = 0.0)
+				inline void interaction(size_t index_i, Real dt = 0.0)
 				{
 					mutex_modify_neighbor_.lock();
 					const Neighborhood &inner_neighborhood = inner_configuration_[index_i];

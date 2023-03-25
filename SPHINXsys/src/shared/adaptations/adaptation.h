@@ -79,7 +79,7 @@ namespace SPH
 		Real ReferenceNumberDensity(Real smoothing_length_ratio = 1.0);
 		virtual Real SmoothingLengthRatio(size_t particle_index_i) { return 1.0; };
 		virtual void resetAdaptationRatios(Real h_spacing_ratio, Real new_system_refinement_ratio = 1.0);
-		virtual void registerAdaptationVariables(BaseParticles &base_particles) {};
+		virtual void registerAdaptationVariables(BaseParticles &base_particles){};
 
 		virtual UniquePtr<BaseCellLinkedList> createCellLinkedList(const BoundingBox &domain_bounds, RealBody &real_body);
 		virtual UniquePtr<BaseLevelSet> createLevelSet(Shape &shape, Real refinement_ratio);
@@ -90,6 +90,8 @@ namespace SPH
 			kernel_ptr_.reset(new KernelType(h_ref_, std::forward<ConstructorArgs>(args)...));
 			sigma0_ref_ = computeReferenceNumberDensity(Vecd());
 		};
+
+		virtual Real getLocalSpacing(Shape &shape, const Vecd &position) { return spacing_ref_; };
 
 	protected:
 		Real computeReferenceNumberDensity(Vec2d zero);
@@ -140,8 +142,6 @@ namespace SPH
 			: ParticleWithLocalRefinement(std::forward<ConstructorArgs>(args)...){};
 
 		virtual ~ParticleRefinementByShape(){};
-
-		virtual Real getLocalSpacing(Shape &shape, const Vecd &position) = 0;
 
 	protected:
 		Real smoothedSpacing(const Real &measure, const Real &transition_thickness);
