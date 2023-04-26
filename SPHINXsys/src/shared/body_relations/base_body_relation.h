@@ -143,7 +143,7 @@ namespace SPH
 	class BaseContactRelation : public SPHRelation
 	{
 	protected:
-		UniquePtrsKeeper<ParticleConfiguration> configuration_ptrs_keeper_;
+		UniquePtrKeepers<ParticleConfiguration> configuration_ptrs_keeper_;
 		virtual void resetNeighborhoodCurrentSize();
 
 	public:

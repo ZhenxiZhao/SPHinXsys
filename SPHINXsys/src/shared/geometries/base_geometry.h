@@ -128,7 +128,7 @@ namespace SPH
 		size_t getShapeIndexByName(const std::string &shape_name);
 
 	protected:
-		UniquePtrsKeeper<Shape> shapes_ptr_keeper_;
+		UniquePtrKeepers<Shape> shapes_ptr_keeper_;
 		StdVec<ShapeAndOp> shapes_and_ops_;
 
 		virtual BoundingBox findBounds() override;

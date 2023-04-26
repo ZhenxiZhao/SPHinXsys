@@ -43,7 +43,7 @@ namespace SPH
 	class ContactRelationCrossResolution : public BaseContactRelation
 	{
 	protected:
-		UniquePtrsKeeper<SearchDepthContact> search_depth_ptrs_keeper_;
+		UniquePtrKeepers<SearchDepthContact> search_depth_ptrs_keeper_;
 
 	public:
 		template <typename... Args>
@@ -77,7 +77,7 @@ namespace SPH
 	class ContactRelation : public ContactRelationCrossResolution
 	{
 	protected:
-		UniquePtrsKeeper<NeighborBuilderContact> neighbor_builder_contact_ptrs_keeper_;
+		UniquePtrKeepers<NeighborBuilderContact> neighbor_builder_contact_ptrs_keeper_;
 
 	public:
 		ContactRelation(SPHBody &sph_body, RealBodyVector contact_bodies);
@@ -95,7 +95,7 @@ namespace SPH
 	class SurfaceContactRelation : public ContactRelationCrossResolution
 	{
 	protected:
-		UniquePtrsKeeper<NeighborBuilderSurfaceContact> neighbor_builder_contact_ptrs_keeper_;
+		UniquePtrKeepers<NeighborBuilderSurfaceContact> neighbor_builder_contact_ptrs_keeper_;
 		UniquePtrKeeper<BodySurfaceLayer> shape_surface_ptr_keeper_;
 
 	public:
@@ -122,7 +122,7 @@ namespace SPH
 	class ContactRelationToBodyPart : public ContactRelationCrossResolution
 	{
 	protected:
-		UniquePtrsKeeper<NeighborBuilderContactBodyPart> neighbor_builder_contact_ptrs_keeper_;
+		UniquePtrKeepers<NeighborBuilderContactBodyPart> neighbor_builder_contact_ptrs_keeper_;
 
 	public:
 		StdVec<NeighborBuilderContactBodyPart *> get_part_contact_neighbors_;
@@ -140,8 +140,8 @@ namespace SPH
 	class AdaptiveContactRelation : public BaseContactRelation
 	{
 	private:
-		UniquePtrsKeeper<SearchDepthAdaptiveContact> adaptive_search_depth_ptr_vector_keeper_;
-		UniquePtrsKeeper<NeighborBuilderContactAdaptive> neighbor_builder_contact_adaptive_ptr_vector_keeper_;
+		UniquePtrKeepers<SearchDepthAdaptiveContact> adaptive_search_depth_ptr_vector_keeper_;
+		UniquePtrKeepers<NeighborBuilderContactAdaptive> neighbor_builder_contact_adaptive_ptr_vector_keeper_;
 
 	protected:
 		StdVec<StdVec<SearchDepthAdaptiveContact *>> get_multi_level_search_range_;

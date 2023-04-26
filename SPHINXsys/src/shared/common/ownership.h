@@ -118,13 +118,13 @@ namespace SPH
 	};
 
 	/**
-	 * @class UniquePtrsKeeper
+	 * @class UniquePtrKeepers
 	 * @brief A wrapper to provide an ownership for
 	 * a vector of base class pointers which point to derived objects.
 	 * It should be a private member.
 	 */
 	template <class BaseType>
-	class UniquePtrsKeeper
+	class UniquePtrKeepers
 	{
 	public:
 		/** used to create a new derived object in the vector
@@ -144,7 +144,7 @@ namespace SPH
 			{
 				return ptr_keepers_[index];
 			}
-			std::cout << "\n Error in UniquePtrsKeeper : UniquePtr index is out of bound! \n";
+			std::cout << "\n Error in UniquePtrKeepers : UniquePtr index is out of bound! \n";
 			exit(1);
 		}
 
